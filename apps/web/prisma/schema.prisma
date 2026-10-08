@@ -1,0 +1,410 @@
+// ============================================================
+// my-store — Prisma schema (PostgreSQL)
+// Auth + Catalog + Inventory + Accounting + Scanner
+// Connection URL lives in prisma.config.ts (Prisma 7 style)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ------------------------------------------------------------
+// Auth & Store
+// ------------------------------------------------------------
+
+enum Role {
+  OWNER
+  ACCOUNTANT
+  CASHIER
+}
+
+model Store {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  currency  String   @default("IRR")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users             User[]
+  customers         Customer[]
+  categories        Category[]
+  products          Product[]
+  invoices          Invoice[]
+  purchases         Purchase[]
+  expenses          Expense[]
+  expenseCategories ExpenseCategory[]
+  transactions      Transaction[]
+  scanEvents        ScanEvent[]
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  role          Role      @default(CASHIER)
+  storeId       String
+  store         Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts     Account[]
+  sessions     Session[]
+  invoices     Invoice[]       @relation("InvoiceCreatedBy")
+  purchases    Purchase[]      @relation("PurchaseCreatedBy")
+  expenses     Expense[]       @relation("ExpenseCreatedBy")
+  scanEvents   ScanEvent[]
+}
+
+// NextAuth (Auth.js) adapter models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ------------------------------------------------------------
+// Catalog
+// ------------------------------------------------------------
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@unique([storeId, slug])
+}
+
+model Product {
+  id                String   @id @default(cuid())
+  name              String
+  sku               String?
+  barcode           String // EAN-13 / UPC-A / Code128 (normalized)
+  description       String?
+  costPrice         Decimal  @default(0) // قیمت خرید
+  salePrice         Decimal  @default(0) // قیمت فروش
+  stock             Int      @default(0) // موجودی فعلی انبار
+  lowStockThreshold Int      @default(5)
+  categoryId        String?
+  category          Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  storeId           String
+  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  invoiceItems  InvoiceItem[]
+  purchaseItems PurchaseItem[]
+  movements     InventoryMovement[]
+  scanEvents    ScanEvent[]
+
+  @@unique([storeId, barcode])
+  @@index([storeId, name])
+}
+
+// ------------------------------------------------------------
+// Inventory
+// ------------------------------------------------------------
+
+enum MovementType {
+  PURCHASE // خرید — افزایش موجودی
+  SALE // فروش — کاهش موجودی
+  ADJUSTMENT // اصلاح دستی
+  SCAN_IN // اسکن ورود
+  SCAN_OUT // اسکن خروج
+}
+
+model InventoryMovement {
+  id        String       @id @default(cuid())
+  productId String
+  product   Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type      MovementType
+  qty       Int // مثبت: ورود به انبار، منفی: خروج
+  refType   String? // "invoice" | "purchase" | "scan" | "adjustment"
+  refId     String?
+  note      String?
+  createdAt DateTime     @default(now())
+
+  @@index([productId, createdAt])
+}
+
+// ------------------------------------------------------------
+// Parties (طرف‌حساب)
+// ------------------------------------------------------------
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  address   String?
+  balance   Decimal  @default(0) // مثبت: مشتری به ما بدهکار است
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices Invoice[]
+
+  @@index([storeId, name])
+}
+
+// ------------------------------------------------------------
+// Sales — فاکتور فروش
+// ------------------------------------------------------------
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  PARTIAL
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  CREDIT
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  number      String // INV-0001
+  status      InvoiceStatus @default(DRAFT)
+  customerId  String?
+  customer    Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  subtotal    Decimal       @default(0)
+  discount    Decimal       @default(0)
+  tax         Decimal       @default(0)
+  total       Decimal       @default(0)
+  paidAmount  Decimal       @default(0)
+  note        String?
+  storeId     String
+  store       Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User          @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
+  issuedAt    DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  items    InvoiceItem[]
+  payments Payment[]
+
+  @@unique([storeId, number])
+  @@index([storeId, createdAt])
+  @@index([storeId, status])
+}
+
+model InvoiceItem {
+  id        String  @id @default(cuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  qty       Int
+  unitPrice Decimal
+  total     Decimal
+}
+
+// ------------------------------------------------------------
+// Purchases — فاکتور خرید
+// ------------------------------------------------------------
+
+model Purchase {
+  id          String   @id @default(cuid())
+  number      String // PUR-0001
+  supplier    String? // نام فروشنده
+  total       Decimal  @default(0)
+  paidAmount  Decimal  @default(0)
+  note        String?
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User     @relation("PurchaseCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items    PurchaseItem[]
+  payments PurchasePayment[]
+
+  @@unique([storeId, number])
+  @@index([storeId, createdAt])
+}
+
+model PurchaseItem {
+  id         String   @id @default(cuid())
+  purchaseId String
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  qty        Int
+  unitCost   Decimal
+  total      Decimal
+}
+
+// ------------------------------------------------------------
+// Expenses — هزینه‌ها
+// ------------------------------------------------------------
+
+model ExpenseCategory {
+  id       String    @id @default(cuid())
+  name     String
+  storeId  String
+  store    Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  expenses Expense[]
+
+  @@unique([storeId, name])
+}
+
+model Expense {
+  id          String          @id @default(cuid())
+  title       String
+  amount      Decimal
+  date        DateTime        @default(now())
+  note        String?
+  receiptUrl  String?
+  categoryId  String?
+  category    ExpenseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  storeId     String
+  store       Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User            @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime        @default(now())
+
+  @@index([storeId, date])
+}
+
+// ------------------------------------------------------------
+// Payments — پرداخت‌ها
+// ------------------------------------------------------------
+
+model Payment {
+  id        String        @id @default(cuid())
+  invoiceId String
+  invoice   Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  method    PaymentMethod @default(CASH)
+  amount    Decimal
+  note      String?
+  createdAt DateTime      @default(now())
+
+  @@index([invoiceId])
+}
+
+model PurchasePayment {
+  id         String   @id @default(cuid())
+  purchaseId String
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  amount     Decimal
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([purchaseId])
+}
+
+// ------------------------------------------------------------
+// Ledger — دفتر کل (double-entry)
+// ------------------------------------------------------------
+
+enum LedgerAccount {
+  CASH_BANK // صندوق/بانک
+  SALES_REVENUE // درآمد فروش
+  COGS // بهای تمام‌شده کالای فروش‌رفته
+  INVENTORY // موجودی انبار
+  ACCOUNTS_RECEIVABLE // حساب‌های دریافتنی (مشتری)
+  ACCOUNTS_PAYABLE // حساب‌های پرداختنی (فروشنده)
+  EXPENSE // هزینه‌ها
+}
+
+enum LedgerType {
+  DEBIT // بدهکار
+  CREDIT // بستانکار
+}
+
+model Transaction {
+  id        String        @id @default(cuid())
+  date      DateTime      @default(now())
+  account   LedgerAccount
+  type      LedgerType
+  amount    Decimal
+  refType   String? // "invoice" | "purchase" | "expense" | "payment" | "scan"
+  refId     String?
+  note      String?
+  storeId   String
+  store     Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@index([storeId, date])
+  @@index([storeId, account])
+  @@index([refType, refId])
+}
+
+// ------------------------------------------------------------
+// Scanner — اسکن محصول (real-time)
+// ------------------------------------------------------------
+
+enum ScanType {
+  SALE // اسکن برای فروش
+  COUNT // شمارش انبار
+  CHECK_IN // ورود به انبار
+  CHECK_OUT // خروج از انبار
+  ADJUSTMENT // اصلاح
+}
+
+model ScanEvent {
+  id        String   @id @default(cuid())
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  barcode   String // بارکد اسکن‌شده (ممکن است محصول ثبت نشده باشد)
+  type      ScanType @default(CHECK_IN)
+  qty       Int      @default(1)
+  device    String? // شناسه دستگاه (گوشی اسکنر)
+  note      String?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([barcode])
+}
