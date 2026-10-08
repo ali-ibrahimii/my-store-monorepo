@@ -26,3 +26,7 @@ pnpm-debug.log*
 # Database
 *.db
 *.sqlite
+
+# Sandbox dev database (PGlite)
+tooling/dev-db/data/
+

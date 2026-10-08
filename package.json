@@ -13,7 +13,9 @@
     "db:migrate": "pnpm --filter web prisma migrate dev",
     "db:studio": "pnpm --filter web prisma studio",
     "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down"
+    "docker:down": "docker-compose down",
+    "db:seed": "pnpm --filter web exec node prisma/seed.mjs",
+    "db:sandbox": "pnpm --filter @my-store/dev-db start"
   },
   "devDependencies": {
     "prettier": "^3.2.0",
