@@ -1,18 +1,11 @@
-// my-store service worker — installable PWA + offline shell.
-// API calls always go to the network (real-time data must stay fresh).
+// my-store service worker — installable PWA with safe static-asset caching.
+// Never cache Next.js documents, RSC payloads, API calls, or framework assets:
+// stale app-router responses can make navigation and development HMR unstable.
 
-const CACHE_NAME = "my-store-v1";
-const OFFLINE_URL = "/dashboard";
+const CACHE_NAME = "my-store-static-v2";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(["/", OFFLINE_URL, "/icon-192.png", "/icon-512.png"]))
-      .catch(() => {
-        // don't block install if some assets are missing
-      }),
-  );
+  // Activate the updated worker promptly; there is intentionally no page reload.
   self.skipWaiting();
 });
 
@@ -21,7 +14,11 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))),
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith("my-store-") && key !== CACHE_NAME)
+            .map((key) => caches.delete(key)),
+        ),
       )
       .then(() => self.clients.claim()),
   );
@@ -29,39 +26,41 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-
-  // Never cache API calls or auth — always fresh.
   const url = new URL(request.url);
-  if (request.method !== "GET" || url.pathname.startsWith("/api/")) {
+
+  if (request.method !== "GET" || url.origin !== self.location.origin) return;
+
+  // Always let Next.js and application data requests go directly to the server.
+  if (
+    url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/_next/") ||
+    url.searchParams.has("_rsc") ||
+    request.headers.has("RSC") ||
+    request.headers.has("Next-Action") ||
+    request.mode === "navigate" ||
+    request.destination === "document"
+  ) {
     return;
   }
 
-  // Network-first for pages, cache-first for static assets.
-  if (request.destination === "document" || request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          return response;
-        })
-        .catch(() => caches.match(request).then((r) => r || caches.match(OFFLINE_URL))),
-    );
-    return;
-  }
+  // Cache only versioned/public static assets. Never cache arbitrary fetches.
+  const isStaticAsset =
+    request.destination === "image" ||
+    request.destination === "font" ||
+    request.destination === "style" ||
+    request.destination === "script";
+  if (!isStaticAsset) return;
 
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
-      return fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached);
+      return fetch(request).then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        }
+        return response;
+      });
     }),
   );
 });
