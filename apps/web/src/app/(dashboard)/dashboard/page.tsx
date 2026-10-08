@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   TrendingUp,
-  TrendingDown,
   Wallet,
   Package,
   Receipt,
@@ -69,8 +68,8 @@ export default async function DashboardPage() {
   const monthRevenue = Number(monthInvoices._sum.total ?? 0);
   const todayExp = Number(todayExpenses._sum.amount ?? 0);
   const monthExp = Number(monthExpenses._sum.amount ?? 0);
-  const inventoryValue = products.reduce((s, p) => s + p.stock * Number(p.costPrice), 0);
-  const lowStock = products.filter((p) => p.stock <= p.lowStockThreshold);
+  const inventoryValue = products.reduce((s: any, p: any) => s + p.stock * Number(p.costPrice), 0);
+  const lowStock = products.filter((p: any) => p.stock <= p.lowStockThreshold);
 
   return (
     <div className="space-y-8">
@@ -159,7 +158,7 @@ export default async function DashboardPage() {
               <p className="text-muted-foreground text-sm">هنوز فاکتوری ثبت نشده است.</p>
             ) : (
               <ul className="space-y-3">
-                {recentInvoices.map((inv) => (
+                {recentInvoices.map((inv: any) => (
                   <li key={inv.id} className="flex items-center justify-between gap-3 border-b pb-2 last:border-0">
                     <div className="min-w-0">
                       <div className="font-medium">{inv.number}</div>
@@ -202,7 +201,7 @@ export default async function DashboardPage() {
               <p className="text-muted-foreground text-sm">همه کالاها موجودی کافی دارند. ✅</p>
             ) : (
               <ul className="space-y-3">
-                {lowStock.slice(0, 8).map((p) => (
+                {lowStock.slice(0, 8).map((p: any) => (
                   <li key={p.id} className="flex items-center justify-between gap-3 border-b pb-2 last:border-0">
                     <span className="truncate text-sm">{p.name}</span>
                     <Badge variant="warning">

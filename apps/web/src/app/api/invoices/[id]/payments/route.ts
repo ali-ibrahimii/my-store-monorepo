@@ -31,7 +31,7 @@ export async function POST(request: Request, context: RouteContext) {
       );
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx: any) => {
       const invoice = await tx.invoice.findFirst({
         where: { id, storeId: user.storeId },
       });

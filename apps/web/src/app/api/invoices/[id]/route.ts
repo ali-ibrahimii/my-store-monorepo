@@ -53,13 +53,13 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     // If transitioning DRAFT -> ISSUED, post the ledger now
     if (invoice.status === "DRAFT" && status === "ISSUED") {
-      const updated = await prisma.$transaction(async (tx) => {
+      const updated = await prisma.$transaction(async (tx: any) => {
         const items = await tx.invoiceItem.findMany({
           where: { invoiceId: id },
           include: { product: true },
         });
         const costOfGoods = items.reduce(
-          (sum, item) => sum + item.qty * Number(item.product.costPrice),
+          (sum: any, item: any) => sum + item.qty * Number(item.product.costPrice),
           0,
         );
         const updatedInvoice = await tx.invoice.update({

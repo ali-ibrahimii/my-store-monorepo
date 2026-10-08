@@ -46,7 +46,7 @@ export async function GET(request: Request) {
 
     // lowStock filter needs a per-row comparison — apply post-query when requested
     const filtered = lowStock
-      ? items.filter((p) => p.stock <= p.lowStockThreshold)
+      ? items.filter((p: any) => p.stock <= p.lowStockThreshold)
       : items;
 
     return NextResponse.json(

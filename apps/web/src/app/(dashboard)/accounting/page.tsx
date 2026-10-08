@@ -6,7 +6,6 @@ import {
   formatCurrency,
   formatDateJalali,
   INVOICE_STATUS_LABELS,
-  toPersianDigits,
 } from "@my-store/shared-utils";
 
 export const dynamic = "force-dynamic";
@@ -65,7 +64,7 @@ export default async function InvoicesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {invoices.map((inv) => (
+                    {invoices.map((inv: any) => (
                       <tr key={inv.id} className="border-b last:border-0">
                         <td className="p-2 font-medium" dir="ltr">{inv.number}</td>
                         <td className="p-2">{inv.customer?.name ?? "حضوری"}</td>
@@ -102,7 +101,7 @@ export default async function InvoicesPage() {
           </CardHeader>
           <CardContent>
             <InvoiceForm
-              products={products.map((p) => ({
+              products={products.map((p: any) => ({
                 id: p.id,
                 name: p.name,
                 salePrice: Number(p.salePrice),

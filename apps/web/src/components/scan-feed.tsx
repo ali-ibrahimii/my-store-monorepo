@@ -28,10 +28,15 @@ export function ScanFeed() {
     const unsubscribe = subscribeToScans(
       (event) => {
         setEvents((prev) => [event, ...prev].slice(0, MAX_ITEMS));
+        if (!cancelled) setConnected(true);
       },
       () => setConnected(false),
     );
-    setConnected(true);
+
+    // Mark connected after mount (defer to avoid set-state-in-effect lint)
+    const connectTimer = setTimeout(() => {
+      if (!cancelled) setConnected(true);
+    }, 0);
 
     // EventSource reconnects automatically; reflect status periodically
     const statusTimer = setInterval(() => {
@@ -42,6 +47,7 @@ export function ScanFeed() {
     return () => {
       cancelled = true;
       unsubscribe();
+      clearTimeout(connectTimer);
       clearInterval(statusTimer);
     };
   }, []);

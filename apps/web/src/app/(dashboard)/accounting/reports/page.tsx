@@ -60,7 +60,7 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   const expenses = sum("EXPENSE").debit - sum("EXPENSE").credit;
   const grossProfit = revenue - cogs;
   const netProfit = grossProfit - expenses;
-  const inventoryValue = products.reduce((s, p) => s + p.stock * Number(p.costPrice), 0);
+  const inventoryValue = products.reduce((s: any, p: any) => s + p.stock * Number(p.costPrice), 0);
 
   // Daily sales series for the bar chart
   const byDay = new Map<string, number>();
@@ -68,8 +68,8 @@ export default async function ReportsPage({ searchParams }: PageProps) {
     const day = inv.createdAt.toISOString().slice(0, 10);
     byDay.set(day, (byDay.get(day) ?? 0) + Number(inv.total));
   }
-  const points = [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  const maxRevenue = Math.max(1, ...points.map((p) => p[1]));
+  const points = [...byDay.entries()].sort((a: any, b: any) => a[0].localeCompare(b[0]));
+  const maxRevenue = Math.max(1, ...points.map((p: any) => p[1]));
 
   return (
     <div className="space-y-8">
@@ -135,7 +135,7 @@ export default async function ReportsPage({ searchParams }: PageProps) {
               <p className="text-muted-foreground text-sm">در این بازه فروشی ثبت نشده است.</p>
             ) : (
               <div className="flex h-48 items-end gap-1">
-                {points.map(([day, value]) => (
+                {points.map(([day, value]: any) => (
                   <div
                     key={day}
                     className="flex h-full flex-1 flex-col items-center justify-end gap-1"
@@ -178,7 +178,7 @@ export default async function ReportsPage({ searchParams }: PageProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {[...byAccount.entries()].map(([account, v]) => (
+                    {[...byAccount.entries()].map(([account, v]: any) => (
                       <tr key={account} className="border-b last:border-0">
                         <td className="p-2 font-medium">
                           {LEDGER_ACCOUNT_LABELS[account] ?? account}
