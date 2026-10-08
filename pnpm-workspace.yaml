@@ -2,3 +2,8 @@ packages:
   - 'apps/*'
   - 'packages/*'
   - 'tooling/*'
+
+# Postinstall scripts we trust (moved here from the stray apps/web/pnpm-workspace.yaml)
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver
