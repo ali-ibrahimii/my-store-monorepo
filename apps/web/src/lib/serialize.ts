@@ -10,11 +10,11 @@ import type {
 } from "@my-store/shared-types";
 
 // Precise Prisma payload types (what the queries actually return)
-export type CategoryPayload = Prisma.CategoryGetPayload<{}>;
-export type ProductPayload = Prisma.ProductGetPayload<{}> & {
+export type CategoryPayload = Prisma.CategoryGetPayload<Record<string, never>>;
+export type ProductPayload = Prisma.ProductGetPayload<Record<string, never>> & {
   category?: CategoryPayload | null;
 };
-export type CustomerPayload = Prisma.CustomerGetPayload<{}>;
+export type CustomerPayload = Prisma.CustomerGetPayload<Record<string, never>>;
 export type InvoicePayload = Prisma.InvoiceGetPayload<{
   include: {
     items: { include: { product: true } };
@@ -78,7 +78,7 @@ export function invoiceDTO(i: InvoicePayload): Invoice {
     status: i.status,
     customerId: i.customerId,
     customer: i.customer ? customerDTO(i.customer) : null,
-    items: i.items.map((item) => ({
+    items: i.items.map((item: any) => ({
       id: item.id,
       invoiceId: item.invoiceId,
       productId: item.productId,
@@ -87,7 +87,7 @@ export function invoiceDTO(i: InvoicePayload): Invoice {
       unitPrice: num(item.unitPrice),
       total: num(item.total),
     })),
-    payments: i.payments.map((p) => ({
+    payments: i.payments.map((p: any) => ({
       id: p.id,
       invoiceId: p.invoiceId,
       method: p.method as PaymentMethod,

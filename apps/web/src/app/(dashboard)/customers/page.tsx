@@ -44,7 +44,7 @@ export default async function CustomersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {customers.map((c) => (
+                    {customers.map((c: any) => (
                       <tr key={c.id} className="border-b last:border-0">
                         <td className="p-2 font-medium">{c.name}</td>
                         <td className="p-2" dir="ltr">{c.phone ?? "—"}</td>

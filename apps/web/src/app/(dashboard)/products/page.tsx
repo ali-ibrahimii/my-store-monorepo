@@ -53,7 +53,7 @@ export default async function ProductsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {products.map((p) => (
+                    {products.map((p: any) => (
                       <tr key={p.id} className="border-b last:border-0">
                         <td className="p-2 font-medium">{p.name}</td>
                         <td className="p-2" dir="ltr">{p.barcode}</td>

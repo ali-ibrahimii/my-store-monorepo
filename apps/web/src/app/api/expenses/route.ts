@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     }
     const data = parsed.data;
 
-    const expense = await prisma.$transaction(async (tx) => {
+    const expense = await prisma.$transaction(async (tx: any) => {
       const created = await tx.expense.create({
         data: {
           storeId: user.storeId,

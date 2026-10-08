@@ -64,22 +64,22 @@ export async function POST(request: Request) {
     }
     const data = parsed.data;
 
-    const invoice = await prisma.$transaction(async (tx) => {
+    const invoice = await prisma.$transaction(async (tx: any) => {
       // Load products & validate stock
       const products = await tx.product.findMany({
-        where: { id: { in: data.items.map((i) => i.productId) }, storeId: user.storeId },
+        where: { id: { in: data.items.map((i: any) => i.productId) }, storeId: user.storeId },
       });
       if (products.length !== data.items.length) {
         throw new Error("یکی از محصولات یافت نشد");
       }
       for (const item of data.items) {
-        const product = products.find((p) => p.id === item.productId)!;
+        const product = products.find((p: any) => p.id === item.productId)!;
         if (product.stock < item.qty) {
           throw new Error(`موجودی «${product.name}» کافی نیست (موجودی: ${product.stock})`);
         }
       }
 
-      const subtotal = data.items.reduce((sum, i) => sum + i.qty * i.unitPrice, 0);
+      const subtotal = data.items.reduce((sum: any, i: any) => sum + i.qty * i.unitPrice, 0);
       const discount = data.discount ?? 0;
       const tax = data.tax ?? 0;
       const total = Math.max(0, subtotal - discount + tax);
@@ -112,7 +112,7 @@ export async function POST(request: Request) {
           createdById: user.id,
           issuedAt: issueNow ? new Date() : null,
           items: {
-            create: data.items.map((item) => ({
+            create: data.items.map((item: any) => ({
               productId: item.productId,
               qty: item.qty,
               unitPrice: item.unitPrice,
@@ -141,7 +141,7 @@ export async function POST(request: Request) {
       if (issueNow) {
         // Decrement stock + inventory movements
         for (const item of data.items) {
-          const product = products.find((p) => p.id === item.productId)!;
+          const product = products.find((p: any) => p.id === item.productId)!;
           await tx.product.update({
             where: { id: product.id },
             data: { stock: { decrement: item.qty } },
@@ -170,8 +170,8 @@ export async function POST(request: Request) {
         }
 
         // Double-entry ledger
-        const costOfGoods = data.items.reduce((sum, item) => {
-          const product = products.find((p) => p.id === item.productId)!;
+        const costOfGoods = data.items.reduce((sum: any, item: any) => {
+          const product = products.find((p: any) => p.id === item.productId)!;
           return sum + item.qty * Number(product.costPrice);
         }, 0);
 

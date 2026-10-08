@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { ExpenseForm } from "@/components/expense-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@my-store/ui-kit";
-import { formatCurrency, formatDateJalali, toPersianDigits } from "@my-store/shared-utils";
+import { formatCurrency, formatDateJalali } from "@my-store/shared-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +52,7 @@ export default async function ExpensesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {expenses.map((e) => (
+                    {expenses.map((e: any) => (
                       <tr key={e.id} className="border-b last:border-0">
                         <td className="p-2 font-medium">{e.title}</td>
                         <td className="p-2 text-muted-foreground">{e.category?.name ?? "—"}</td>

@@ -19,7 +19,7 @@ export async function recordScan(input: CreateScanInput, userId: string, storeId
   const type = input.type ?? "CHECK_IN";
   const qty = input.qty ?? 1;
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx: any) => {
     const product = await tx.product.findUnique({
       where: { storeId_barcode: { storeId, barcode } },
     });

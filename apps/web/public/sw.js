@@ -4,7 +4,7 @@
 
 const CACHE_NAME = "my-store-static-v2";
 
-self.addEventListener("install", (event) => {
+self.addEventListener("install", () => {
   // Activate the updated worker promptly; there is intentionally no page reload.
   self.skipWaiting();
 });

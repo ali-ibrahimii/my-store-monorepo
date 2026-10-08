@@ -50,8 +50,14 @@ export function Scanner({ onScanned }: ScannerProps) {
   // Keep latest type/qty in refs so the decode callback always uses fresh values
   const typeRef = useRef(type);
   const qtyRef = useRef(qty);
-  typeRef.current = type;
-  qtyRef.current = qty;
+
+  useEffect(() => {
+    typeRef.current = type;
+  }, [type]);
+
+  useEffect(() => {
+    qtyRef.current = qty;
+  }, [qty]);
 
   const beep = useCallback(() => {
     try {
