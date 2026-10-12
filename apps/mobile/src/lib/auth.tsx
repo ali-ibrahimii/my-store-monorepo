@@ -18,7 +18,6 @@ import React, {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import type { LoginInput, RegisterInput, SessionUser } from "@my-store/shared-types";
@@ -27,9 +26,13 @@ import {
   fetchSession,
   initApiClient,
   isUnauthorized,
+  setAuthToken,
   login as apiLogin,
   register as apiRegister,
 } from "./api";
+
+// یک‌بار موقع لود ماژول — با remount شدن درخت هم تنظیمات نمی‌پرد
+initApiClient();
 
 const STORAGE_KEY = "my-store.auth.v1";
 
@@ -69,10 +72,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
 
-  // api-client به یک تابع همگام نیاز دارد؛ توکن را در ref نگه می‌داریم
-  const tokenRef = useRef<string | null>(null);
-  initApiClient(() => tokenRef.current);
-
   const persist = useCallback(async (value: StoredAuth | null) => {
     try {
       if (value) await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(value));
@@ -84,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const applySession = useCallback(
     async (value: StoredAuth) => {
-      tokenRef.current = value.token;
+      setAuthToken(value.token); // از همین لحظه همه‌ی درخواست‌ها هدر می‌گیرند
       setToken(value.token);
       setUser(value.user);
       setStatus("authenticated");
@@ -94,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const clearSession = useCallback(async () => {
-    tokenRef.current = null;
+    setAuthToken(null);
     setToken(null);
     setUser(null);
     setStatus("unauthenticated");
@@ -119,9 +118,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // تا وقتی اعتبار توکن را نمی‌دانیم، کاربر را «وارد شده» نشان می‌دهیم
+      // تا وقتی اعتبار توکن را نمی‌دانیم، کاربر را «وارد شده» نگه می‌داریم
       // تا چشمک نزند؛ اگر ۴۰۱ شد همان لحظه به ورود می‌رود.
-      tokenRef.current = stored.token;
+      setAuthToken(stored.token);
       setToken(stored.token);
       setUser(stored.user);
       setStatus("authenticated");

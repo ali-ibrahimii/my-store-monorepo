@@ -32,12 +32,32 @@ export interface HealthStatus {
   error?: string;
 }
 
+// ------------------------------------------------------------
+// توکن جاری — در سطح ماژول، نه داخل ref یک کامپوننت
+//
+// چرا؟ قبلاً `getToken: () => tokenRef.current` را از داخل AuthProvider
+// می‌گرفتیم. اگر React (مثلاً StrictMode در dev وب) درخت را remount کند،
+// ref جدید ساخته می‌شد ولی این closure هنوز به ref مرده‌ی قبلی اشاره
+// می‌کرد → هیچ درخواستی هدر Authorization نمی‌گرفت → ۴۰۱ → پرش به ورود.
+// متغیر ماژولی با هر بار mount/unmount زنده می‌ماند.
+// ------------------------------------------------------------
+let currentToken: string | null = null;
+
+/** فقط AuthProvider این را صدا می‌زند (ورود/خروج/bootstrap). */
+export function setAuthToken(token: string | null): void {
+  currentToken = token;
+}
+
+export function getAuthToken(): string | null {
+  return currentToken;
+}
+
 let apiInitialized = false;
 
-/** باید یک‌بار (قبل از اولین درخواست) با تابع خواندن توکن صدا زده شود. */
-export function initApiClient(getToken: () => string | null): void {
+/** باید یک‌بار موقع بالا آمدن اپ صدا زده شود. */
+export function initApiClient(): void {
   if (apiInitialized) return;
-  configureApiClient({ baseUrl: API_BASE_URL, getToken });
+  configureApiClient({ baseUrl: API_BASE_URL, getToken: () => currentToken });
   apiInitialized = true;
 }
 
