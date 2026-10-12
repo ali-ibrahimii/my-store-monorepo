@@ -21,6 +21,7 @@ import React, {
   useState,
 } from "react";
 import type { LoginInput, RegisterInput, SessionUser } from "@my-store/shared-types";
+import { MOBILE_TOKEN_COOKIE } from "@my-store/shared-utils";
 import {
   describeApiError,
   fetchSession,
@@ -35,6 +36,25 @@ import {
 initApiClient();
 
 const STORAGE_KEY = "my-store.auth.v1";
+
+/**
+ * در پلتفرم وب، توکن را به‌صورت کوکی هم ذخیره می‌کنیم.
+ * چرا؟ پروکسی پیش‌نمایش (e2b/arena) هدر `Authorization` را از درخواست‌ها
+ * حذف می‌کند، ولی کوکی‌ها را (مثل وب‌اپ) عبور می‌دهد. روی native کوکی
+ * معنا ندارد و همان هدر Authorization استفاده می‌شود.
+ */
+function syncWebCookie(token: string | null): void {
+  if (typeof document === "undefined") return;
+  try {
+    if (token) {
+      document.cookie = `${MOBILE_TOKEN_COOKIE}=${encodeURIComponent(token)}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`;
+    } else {
+      document.cookie = `${MOBILE_TOKEN_COOKIE}=; path=/; max-age=0`;
+    }
+  } catch {
+    // کوکی اختیاری است؛ AsyncStorage منبع اصلی است
+  }
+}
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -84,6 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const applySession = useCallback(
     async (value: StoredAuth) => {
       setAuthToken(value.token); // از همین لحظه همه‌ی درخواست‌ها هدر می‌گیرند
+      syncWebCookie(value.token); // و در وب، کوکی هم می‌گذاریم (عبور از پروکسی)
       setToken(value.token);
       setUser(value.user);
       setStatus("authenticated");
@@ -94,6 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const clearSession = useCallback(async () => {
     setAuthToken(null);
+    syncWebCookie(null);
     setToken(null);
     setUser(null);
     setStatus("unauthenticated");
@@ -121,6 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // تا وقتی اعتبار توکن را نمی‌دانیم، کاربر را «وارد شده» نگه می‌داریم
       // تا چشمک نزند؛ اگر ۴۰۱ شد همان لحظه به ورود می‌رود.
       setAuthToken(stored.token);
+      syncWebCookie(stored.token);
       setToken(stored.token);
       setUser(stored.user);
       setStatus("authenticated");

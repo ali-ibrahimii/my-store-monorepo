@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { parseBearerToken, readMobileToken } from "@/lib/mobile-token";
-import { hasRole } from "@my-store/shared-utils";
+import { MOBILE_TOKEN_COOKIE, hasRole } from "@my-store/shared-utils";
 import type { Role, SessionUser } from "@my-store/shared-types";
 
 export function jsonError(status: number, message: string) {
@@ -42,17 +42,22 @@ export async function requireStoreUser(minRole?: Role) {
       storeId: raw.storeId,
     };
   } else {
-    // بدون کوکی نشست → توکن Bearer موبایل را امتحان می‌کنیم.
-    // (هدر از `next/headers` خوانده می‌شود تا هیچ route ای نیاز به تغییر نداشته باشد.)
+    // بدون کوکی نشست → توکن موبایل را از دو جا امتحان می‌کنیم:
+    //   ۱) هدر Authorization (native و curl)
+    //   ۲) کوکی MOBILE_TOKEN_COOKIE — چون پروکسی پیش‌نمایش هدر را حذف
+    //      می‌کند ولی کوکی را عبور می‌دهد
+    // (هدر/کوکی از `next/headers` خوانده می‌شود تا هیچ route ای عوض نشود.)
     const headerList = await headers().catch(() => null);
-    const token = parseBearerToken(headerList?.get("authorization") ?? null);
+    const cookieToken =
+      (await cookies().catch(() => null))?.get(MOBILE_TOKEN_COOKIE)?.value ?? null;
+    const token = parseBearerToken(headerList?.get("authorization") ?? null) ?? cookieToken;
     if (token) {
       user = await readMobileToken(token);
-      // [debug] برای عیب‌یابی پرش به ورود: توکن هست ولی نامعتبر/منقضی؟
-      if (!user) console.warn("[auth] 401: bearer token فرستاده شد ولی نامعتبر/منقضی بود");
+      // [debug] توکن رسید ولی نامعتبر/منقضی؟
+      if (!user) console.warn("[auth] 401: توکن (هدر/کوکی) رسید ولی نامعتبر/منقضی بود");
     } else {
-      // [debug] آیا کلاینت اصلاً هدر Authorization را فرستاده؟
-      console.warn("[auth] 401: نه کوکی نشست هست نه هدر Authorization");
+      // [debug] کلاینت اصلاً توکن نفرستاده؟
+      console.warn("[auth] 401: نه کوکی نشست، نه Authorization، نه کوکی موبایل");
     }
   }
 

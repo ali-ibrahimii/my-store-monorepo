@@ -106,7 +106,7 @@ export async function apiRequest<T = unknown>(
   const response = await fetch(finalUrl, {
     method,
     signal,
-    credentials: options.credentials ?? clientConfig.credentials ?? (token ? "omit" : "same-origin"),
+    credentials: options.credentials ?? clientConfig.credentials ?? "same-origin",
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
