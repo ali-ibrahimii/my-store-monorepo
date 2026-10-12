@@ -40,9 +40,9 @@ const log = (message) => console.log(`[mobile-dev] ${message}`);
 // ------------------------------------------------------------
 // پروکسی HTTP
 // ------------------------------------------------------------
-function forward(req, res, origin) {
+function forward(req, res, origin, extraHeaders = {}) {
   const target = new URL(req.url, origin);
-  const headers = { ...req.headers };
+  const headers = { ...req.headers, ...extraHeaders };
   delete headers.host;
   headers.host = target.host;
   // پیش‌نمایش‌های proxy‌شده origin متفاوت می‌فرستند؛ برای سرور داخلی
@@ -85,6 +85,17 @@ const server = http.createServer((req, res) => {
 
   // فقط مسیرهای API به وب‌اپ می‌روند؛ بقیه (bundle، asset، HMR) مال Metro است
   if (url === "/api" || url.startsWith("/api/")) {
+    // پروکسی بیرونی پیش‌نمایش هدر Authorization را حذف می‌کند، ولی query
+    // را عبور می‌دهد؛ اپ وب توکن را در `mstore_token` می‌فرستد و ما اینجا
+    // آن را به هدر داخلی `x-mystore-token` برای Next تبدیل می‌کنیم.
+    const parsed = new URL(url, API_TARGET.origin);
+    const queryToken = parsed.searchParams.get("mstore_token");
+    if (queryToken) {
+      parsed.searchParams.delete("mstore_token");
+      req.url = parsed.pathname + parsed.search;
+      forward(req, res, API_TARGET.origin, { "x-mystore-token": queryToken });
+      return;
+    }
     forward(req, res, API_TARGET.origin);
     return;
   }

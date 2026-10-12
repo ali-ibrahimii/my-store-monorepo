@@ -42,15 +42,19 @@ export async function requireStoreUser(minRole?: Role) {
       storeId: raw.storeId,
     };
   } else {
-    // بدون کوکی نشست → توکن موبایل را از دو جا امتحان می‌کنیم:
+    // بدون کوکی نشست → توکن موبایل را از سه جا امتحان می‌کنیم:
     //   ۱) هدر Authorization (native و curl)
-    //   ۲) کوکی MOBILE_TOKEN_COOKIE — چون پروکسی پیش‌نمایش هدر را حذف
-    //      می‌کند ولی کوکی را عبور می‌دهد
+    //   ۲) هدر x-mystore-token — پروکسی dev توکن query را به آن تبدیل
+    //      می‌کند (پروکسی بیرونی پیش‌نمایش Authorization را حذف می‌کند)
+    //   ۳) کوکی MOBILE_TOKEN_COOKIE (مرورگرهای هم‌ریشه/first‑party)
     // (هدر/کوکی از `next/headers` خوانده می‌شود تا هیچ route ای عوض نشود.)
     const headerList = await headers().catch(() => null);
     const cookieToken =
       (await cookies().catch(() => null))?.get(MOBILE_TOKEN_COOKIE)?.value ?? null;
-    const token = parseBearerToken(headerList?.get("authorization") ?? null) ?? cookieToken;
+    const token =
+      parseBearerToken(headerList?.get("authorization") ?? null) ??
+      (headerList?.get("x-mystore-token")?.trim() || null) ??
+      cookieToken;
     if (token) {
       user = await readMobileToken(token);
       // [debug] توکن رسید ولی نامعتبر/منقضی؟

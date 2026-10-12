@@ -93,6 +93,15 @@ export async function apiRequest<T = unknown>(
       if (value !== undefined) url.searchParams.set(key, String(value));
     }
   }
+
+  // [وب] توکن را در query string هم بگذاریم.
+  // چرا؟ پروکسی پیش‌نمایش هدر Authorization را حذف می‌کند و مرورگر در
+  // iframe کراس‑origin کوکی شخص‑ثالث را هم بلاک می‌کند؛ تنها حاملی که از
+  // هر دو مطمئن عبور می‌کند query است. پروکسی dev آن را به هدر داخلی
+  // `x-mystore-token` تبدیل می‌کند (native اصلاً به این نیاز ندارد).
+  if (token && typeof window !== "undefined") {
+    url.searchParams.set("mstore_token", token);
+  }
   const finalUrl = baseUrl ? url.toString() : url.pathname + url.search;
 
   const headers: Record<string, string> = {
@@ -114,7 +123,7 @@ export async function apiRequest<T = unknown>(
   // [debug موقت] برای تشخیص اینکه مرورگر کدام باندل را اجرا می‌کند و
   // آیا هدر Authorization واقعاً فرستاده شده — بعد از عیب‌یابی حذف شود.
   (globalThis as { __MYSTORE_DEBUG__?: unknown }).__MYSTORE_DEBUG__ = {
-    bundle: "v3-module-token",
+    bundle: "v5-query-token",
     last: { method, url: finalUrl, hadAuth: Boolean(token), status: response.status },
   };
 
