@@ -1,4 +1,16 @@
 import Link from "next/link";
+import { AlertCircle, DatabaseZap } from "lucide-react";
+
+import { Alert, AlertDescription, AlertTitle } from "@my-store/ui-kit/components/alert";
+import { Button } from "@my-store/ui-kit/components/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@my-store/ui-kit/components/card";
+import { Separator } from "@my-store/ui-kit/components/separator";
 
 /**
  * پیام دوستانه وقتی دیتابیس در دسترس نیست (فقط محیط توسعه).
@@ -6,31 +18,51 @@ import Link from "next/link";
  */
 export function DbOfflineNotice({ detail }: { detail?: string }) {
   return (
-    <div className="mx-auto max-w-xl space-y-4 rounded-lg border bg-card p-6 shadow-sm">
-      <h1 className="text-xl font-bold">دیتابیس در دسترس نیست</h1>
-      <p className="text-muted-foreground text-sm">
-        وب‌اپ بالا آمده، ولی به MongoDB وصل نمی‌شود؛ به همین دلیل صفحه‌ها و ورود کار نمی‌کنند.
-      </p>
+    <Card className="mx-auto w-full max-w-xl">
+      <CardHeader>
+        <div className="bg-destructive/10 text-destructive flex size-10 items-center justify-center rounded-xl">
+          <DatabaseZap className="size-5" />
+        </div>
+        <CardTitle>دیتابیس در دسترس نیست</CardTitle>
+        <CardDescription>
+          وب‌اپ بالا آمده، ولی به MongoDB وصل نمی‌شود؛ به همین دلیل صفحه‌ها و ورود
+          کار نمی‌کنند.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Alert>
+          <AlertCircle className="size-4" />
+          <AlertTitle>سریع‌ترین راه</AlertTitle>
+          <AlertDescription>
+            <p>
+              در ریشه‌ی پروژه <code dir="ltr">pnpm dev</code> را اجرا کنید — دیتابیس
+              توسعه را خودش بالا می‌آورد.
+            </p>
+            <p>
+              یا جداگانه: <code dir="ltr">pnpm db:sandbox</code> (بدون Docker) ·{" "}
+              <code dir="ltr">pnpm docker:up</code> (MongoDB واقعی)
+            </p>
+          </AlertDescription>
+        </Alert>
 
-      <ul className="list-inside list-disc space-y-1 text-sm">
-        <li>
-          ساده‌ترین راه: در ریشه‌ی پروژه <code dir="ltr">pnpm dev</code> را اجرا کنید — دیتابیس
-          توسعه را خودش بالا می‌آورد.
-        </li>
-        <li>
-          یا جداگانه: <code dir="ltr">pnpm db:sandbox</code> (بدون Docker) ·{" "}
-          <code dir="ltr">pnpm docker:up</code> (MongoDB واقعی)
-        </li>
-        <li>
-          بررسی وضعیت: <Link href="/api/health" className="text-primary underline">/api/health</Link>
-        </li>
-      </ul>
+        {detail ? (
+          <>
+            <Separator />
+            <pre
+              className="bg-muted overflow-auto rounded-md p-3 text-xs"
+              dir="ltr"
+            >
+              {detail}
+            </pre>
+          </>
+        ) : null}
 
-      {detail ? (
-        <pre className="bg-muted overflow-auto rounded-md p-3 text-xs" dir="ltr">
-          {detail}
-        </pre>
-      ) : null}
-    </div>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/api/health" target="_blank">
+            بررسی وضعیت دیتابیس
+          </Link>
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

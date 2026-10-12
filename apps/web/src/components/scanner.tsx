@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import * as React from "react";
 import {
   Camera,
   CameraOff,
@@ -12,7 +12,30 @@ import {
   ScanLine,
   Volume2,
 } from "lucide-react";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from "@my-store/ui-kit";
+
+import { Alert, AlertDescription } from "@my-store/ui-kit/components/alert";
+import { Badge } from "@my-store/ui-kit/components/badge";
+import { Button } from "@my-store/ui-kit/components/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@my-store/ui-kit/components/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@my-store/ui-kit/components/empty";
+import { Input } from "@my-store/ui-kit/components/input";
+import { Label } from "@my-store/ui-kit/components/label";
+import { Separator } from "@my-store/ui-kit/components/separator";
+import { Spinner } from "@my-store/ui-kit/components/spinner";
+import { Tabs, TabsList, TabsTrigger } from "@my-store/ui-kit/components/tabs";
+import { cn } from "@my-store/ui-kit/lib/utils";
 import { lookupByBarcode, recordScan } from "@my-store/api-client";
 import {
   formatCurrency,
@@ -30,36 +53,36 @@ interface ScannerProps {
 }
 
 export function Scanner({ onScanned }: ScannerProps) {
-  const readerRef = useRef<HTMLDivElement>(null);
-  const qrRef = useRef<import("html5-qrcode").Html5Qrcode | null>(null);
-  const lastCodeRef = useRef<{ code: string; at: number } | null>(null);
+  const readerRef = React.useRef<HTMLDivElement>(null);
+  const qrRef = React.useRef<import("html5-qrcode").Html5Qrcode | null>(null);
+  const lastCodeRef = React.useRef<{ code: string; at: number } | null>(null);
 
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [torch, setTorch] = useState(false);
-  const [torchSupported, setTorchSupported] = useState(false);
-  const [manualCode, setManualCode] = useState("");
-  const [type, setType] = useState<ScanType>("SALE");
-  const [qty, setQty] = useState(1);
-  const [busy, setBusy] = useState(false);
+  const [running, setRunning] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [torch, setTorch] = React.useState(false);
+  const [torchSupported, setTorchSupported] = React.useState(false);
+  const [manualCode, setManualCode] = React.useState("");
+  const [type, setType] = React.useState<ScanType>("SALE");
+  const [qty, setQty] = React.useState(1);
+  const [busy, setBusy] = React.useState(false);
 
-  const [lastEvent, setLastEvent] = useState<ScanEvent | null>(null);
-  const [lastProduct, setLastProduct] = useState<Product | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
+  const [lastEvent, setLastEvent] = React.useState<ScanEvent | null>(null);
+  const [lastProduct, setLastProduct] = React.useState<Product | null>(null);
+  const [status, setStatus] = React.useState<string | null>(null);
 
   // Keep latest type/qty in refs so the decode callback always uses fresh values
-  const typeRef = useRef(type);
-  const qtyRef = useRef(qty);
+  const typeRef = React.useRef(type);
+  const qtyRef = React.useRef(qty);
 
-  useEffect(() => {
+  React.useEffect(() => {
     typeRef.current = type;
   }, [type]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     qtyRef.current = qty;
   }, [qty]);
 
-  const beep = useCallback(() => {
+  const beep = React.useCallback(() => {
     try {
       const ctx = new (window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
@@ -77,7 +100,7 @@ export function Scanner({ onScanned }: ScannerProps) {
     }
   }, []);
 
-  const handleDecoded = useCallback(
+  const handleDecoded = React.useCallback(
     async (decodedText: string) => {
       const code = normalizeBarcode(decodedText);
       if (!code) return;
@@ -116,7 +139,7 @@ export function Scanner({ onScanned }: ScannerProps) {
     [beep, onScanned],
   );
 
-  const start = useCallback(async () => {
+  const start = React.useCallback(async () => {
     setError(null);
     if (!readerRef.current) return;
     try {
@@ -168,7 +191,7 @@ export function Scanner({ onScanned }: ScannerProps) {
     }
   }, [handleDecoded]);
 
-  const stop = useCallback(async () => {
+  const stop = React.useCallback(async () => {
     const qr = qrRef.current;
     if (qr) {
       try {
@@ -183,7 +206,7 @@ export function Scanner({ onScanned }: ScannerProps) {
     setTorch(false);
   }, []);
 
-  const toggleTorch = useCallback(async () => {
+  const toggleTorch = React.useCallback(async () => {
     const qr = qrRef.current as unknown as {
       applyVideoConstraints?: (c: MediaTrackConstraints) => Promise<void>;
     } | null;
@@ -199,7 +222,7 @@ export function Scanner({ onScanned }: ScannerProps) {
     }
   }, [torch]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     return () => {
       // cleanup on unmount
       const qr = qrRef.current;
@@ -216,18 +239,30 @@ export function Scanner({ onScanned }: ScannerProps) {
     setManualCode("");
   };
 
+  const stockAfterScan = lastEvent && lastProduct
+    ? lastProduct.stock +
+      (lastEvent.type === "CHECK_IN"
+        ? lastEvent.qty
+        : lastEvent.type === "CHECK_OUT" || lastEvent.type === "SALE"
+          ? -lastEvent.qty
+          : 0)
+    : null;
+
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       {/* Camera panel */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <ScanLine className="h-5 w-5" />
+            <ScanLine className="size-4" />
             دوربین اسکنر
           </CardTitle>
+          <CardDescription>
+            بارکد را داخل کادر نگه دارید؛ پس از تشخیص، خودکار ثبت می‌شود.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="relative overflow-hidden rounded-lg border bg-black">
+          <div className="relative overflow-hidden rounded-xl border bg-black">
             <div
               id="qr-reader"
               ref={readerRef}
@@ -235,9 +270,9 @@ export function Scanner({ onScanned }: ScannerProps) {
               style={{ minHeight: 280 }}
             />
             {!running ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted/80 p-6 text-center">
-                <Camera className="h-8 w-8 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">
+              <div className="bg-muted/80 absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center">
+                <Camera className="text-muted-foreground size-8" />
+                <p className="text-muted-foreground text-sm">
                   دوربین خاموش است — برای شروع اسکن دکمه زیر را بزنید
                 </p>
               </div>
@@ -247,35 +282,50 @@ export function Scanner({ onScanned }: ScannerProps) {
           <div className="flex flex-wrap items-center gap-2">
             {!running ? (
               <Button onClick={start}>
-                <Camera className="h-4 w-4" />
+                <Camera className="size-4" />
                 شروع اسکن
               </Button>
             ) : (
               <Button variant="destructive" onClick={stop}>
-                <CameraOff className="h-4 w-4" />
+                <CameraOff className="size-4" />
                 توقف
               </Button>
             )}
             {running && torchSupported ? (
               <Button variant="outline" size="icon" onClick={toggleTorch} title="فلاش">
-                {torch ? <FlashlightOff className="h-4 w-4" /> : <Flashlight className="h-4 w-4" />}
+                {torch ? (
+                  <FlashlightOff className="size-4" />
+                ) : (
+                  <Flashlight className="size-4" />
+                )}
               </Button>
             ) : null}
             {busy ? (
-              <Badge variant="secondary">در حال ثبت...</Badge>
+              <Badge variant="secondary" className="gap-1">
+                <Spinner className="size-3" />
+                در حال ثبت…
+              </Badge>
             ) : status ? (
-              <Badge variant="success">{status}</Badge>
+              <Badge variant={lastProduct ? "success" : "warning"}>{status}</Badge>
             ) : null}
           </div>
 
           {error ? (
-            <p className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{error}</p>
+            <Alert variant="destructive">
+              <CameraOff className="size-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           ) : null}
 
+          <Separator />
+
           {/* Manual entry */}
-          <div className="space-y-2 rounded-md border border-dashed p-3">
-            <Label htmlFor="manual-code" className="flex items-center gap-2 text-muted-foreground">
-              <Keyboard className="h-4 w-4" />
+          <div className="space-y-2 rounded-lg border border-dashed p-3">
+            <Label
+              htmlFor="manual-code"
+              className="text-muted-foreground flex items-center gap-2"
+            >
+              <Keyboard className="size-4" />
               ورود دستی بارکد (اگر دوربین کار نکرد)
             </Label>
             <div className="flex gap-2">
@@ -283,11 +333,15 @@ export function Scanner({ onScanned }: ScannerProps) {
                 id="manual-code"
                 dir="ltr"
                 value={manualCode}
-                onChange={(e) => setManualCode(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && submitManual()}
+                onChange={(event) => setManualCode(event.target.value)}
+                onKeyDown={(event) => event.key === "Enter" && submitManual()}
                 placeholder="بارکد را تایپ کنید"
               />
-              <Button variant="secondary" onClick={submitManual} disabled={!manualCode.trim()}>
+              <Button
+                variant="secondary"
+                onClick={submitManual}
+                disabled={!manualCode.trim() || busy}
+              >
                 ثبت
               </Button>
             </div>
@@ -300,23 +354,28 @@ export function Scanner({ onScanned }: ScannerProps) {
         <Card>
           <CardHeader>
             <CardTitle>تنظیمات اسکن</CardTitle>
+            <CardDescription>
+              نوع تراکنش و تعداد را قبل از اسکن انتخاب کنید.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>نوع اسکن</Label>
-              <div className="flex flex-wrap gap-2">
-                {SCAN_TYPES.map((t) => (
-                  <Button
-                    key={t}
-                    size="sm"
-                    variant={type === t ? "default" : "outline"}
-                    onClick={() => setType(t)}
-                  >
-                    {SCAN_TYPE_LABELS[t]}
-                  </Button>
-                ))}
-              </div>
+              <Tabs
+                value={type}
+                onValueChange={(value) => setType(value as ScanType)}
+              >
+                <TabsList className="h-auto flex-wrap">
+                  {SCAN_TYPES.map((scanType) => (
+                    <TabsTrigger key={scanType} value={scanType}>
+                      {SCAN_TYPE_LABELS[scanType]}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
             </div>
+
+            <Separator />
 
             <div className="space-y-2">
               <Label>تعداد</Label>
@@ -324,14 +383,18 @@ export function Scanner({ onScanned }: ScannerProps) {
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => setQty((q) => Math.max(1, q - 1))}
+                  onClick={() => setQty((current) => Math.max(1, current - 1))}
                 >
                   −
                 </Button>
-                <span className="w-12 text-center text-xl font-bold">
+                <span className="w-12 text-center text-xl font-bold tabular-nums">
                   {toPersianDigits(qty)}
                 </span>
-                <Button variant="outline" size="icon" onClick={() => setQty((q) => q + 1)}>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setQty((current) => current + 1)}
+                >
                   +
                 </Button>
               </div>
@@ -342,14 +405,19 @@ export function Scanner({ onScanned }: ScannerProps) {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              {lastProduct ? <Package className="h-5 w-5" /> : <PackageSearch className="h-5 w-5" />}
+              {lastProduct ? (
+                <Package className="size-4" />
+              ) : (
+                <PackageSearch className="size-4" />
+              )}
               آخرین اسکن
             </CardTitle>
+            <CardDescription>نتیجه‌ی آخرین بارکد خوانده‌شده</CardDescription>
           </CardHeader>
           <CardContent>
             {lastEvent ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
                   <span className="font-medium">
                     {lastProduct ? lastProduct.name : "محصول تعریف نشده"}
                   </span>
@@ -357,27 +425,50 @@ export function Scanner({ onScanned }: ScannerProps) {
                     {SCAN_TYPE_LABELS[lastEvent.type]}
                   </Badge>
                 </div>
+
                 <div className="text-muted-foreground space-y-1 text-sm">
                   <div className="flex items-center gap-2">
-                    <Volume2 className="h-3 w-3" />
+                    <Volume2 className="size-3" />
                     بارکد: <span dir="ltr">{lastEvent.barcode}</span>
                   </div>
                   {lastProduct ? (
                     <>
-                      <div>قیمت فروش: {formatCurrency(lastProduct.salePrice)}</div>
-                      <div>موجودی پس از اسکن: {toPersianDigits(lastProduct.stock + (lastEvent.type === "CHECK_IN" ? lastEvent.qty : lastEvent.type === "CHECK_OUT" || lastEvent.type === "SALE" ? -lastEvent.qty : 0))}</div>
+                      <div>
+                        قیمت فروش: {formatCurrency(lastProduct.salePrice)}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        موجودی پس از اسکن:
+                        <Badge
+                          variant={
+                            (stockAfterScan ?? 0) <= lastProduct.lowStockThreshold
+                              ? "warning"
+                              : "secondary"
+                          }
+                        >
+                          {toPersianDigits(stockAfterScan ?? 0)}
+                        </Badge>
+                      </div>
                     </>
                   ) : (
-                    <div className="text-amber-600">
-                      این بارکد در انبار ثبت نشده — می‌توانید در صفحه محصولات اضافه کنید.
-                    </div>
+                    <p className={cn("text-warning")}>
+                      این بارکد در انبار ثبت نشده — می‌توانید در صفحه محصولات اضافه
+                      کنید.
+                    </p>
                   )}
                 </div>
               </div>
             ) : (
-              <p className="text-muted-foreground text-sm">
-                هنوز اسکن انجام نشده. دوربین را روشن کنید و بارکد محصول را جلوی آن بگیرید.
-              </p>
+              <Empty className="border border-dashed p-4 md:p-6">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <PackageSearch />
+                  </EmptyMedia>
+                  <EmptyTitle>هنوز اسکنی انجام نشده</EmptyTitle>
+                  <EmptyDescription>
+                    دوربین را روشن کنید و بارکد محصول را جلوی آن بگیرید.
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             )}
           </CardContent>
         </Card>

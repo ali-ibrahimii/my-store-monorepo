@@ -1,9 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Button, Input, Label } from "@my-store/ui-kit";
+import { AlertCircle, Ban, CheckCircle2, CreditCard } from "lucide-react";
+import { toast } from "sonner";
+
 import { addInvoicePayment, updateInvoiceStatus } from "@my-store/api-client";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@my-store/ui-kit/components/alert-dialog";
+import { Alert, AlertDescription } from "@my-store/ui-kit/components/alert";
+import { Button } from "@my-store/ui-kit/components/button";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+} from "@my-store/ui-kit/components/field";
+import { Input } from "@my-store/ui-kit/components/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@my-store/ui-kit/components/select";
+import { Separator } from "@my-store/ui-kit/components/separator";
+import { Spinner } from "@my-store/ui-kit/components/spinner";
 import { PAYMENT_METHOD_LABELS } from "@my-store/shared-utils";
 import type { Invoice, InvoiceStatus, PaymentMethod } from "@my-store/shared-types";
 
@@ -12,18 +42,18 @@ interface InvoiceActionsProps {
 }
 
 const NEXT_STATUSES: { status: InvoiceStatus; label: string }[] = [
-  { status: "ISSUED", label: "صادر شود" },
-  { status: "PAID", label: "پرداخت‌شده" },
-  { status: "CANCELLED", label: "لغو فاکتور" },
+  { status: "ISSUED", label: "صدور فاکتور" },
+  { status: "PAID", label: "ثبت به‌عنوان پرداخت‌شده" },
 ];
 
 export function InvoiceActions({ invoice }: InvoiceActionsProps) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const remaining = Math.max(0, invoice.total - invoice.paidAmount);
-  const canPay = remaining > 0 && invoice.status !== "CANCELLED" && invoice.status !== "DRAFT";
+  const canPay =
+    remaining > 0 && invoice.status !== "CANCELLED" && invoice.status !== "DRAFT";
 
   async function onPay(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -36,6 +66,7 @@ export function InvoiceActions({ invoice }: InvoiceActionsProps) {
         amount: Number(form.get("amount") ?? 0),
         note: String(form.get("note") ?? "") || undefined,
       });
+      toast.success("پرداخت ثبت شد");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "خطا در ثبت پرداخت");
@@ -49,6 +80,7 @@ export function InvoiceActions({ invoice }: InvoiceActionsProps) {
     setBusy(true);
     try {
       await updateInvoiceStatus(invoice.id, status);
+      toast.success("وضعیت فاکتور به‌روز شد");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "خطا در تغییر وضعیت");
@@ -60,10 +92,10 @@ export function InvoiceActions({ invoice }: InvoiceActionsProps) {
   return (
     <div className="space-y-4">
       {canPay ? (
-        <form onSubmit={onPay} className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="amount">مبلغ پرداخت (تومان)</Label>
+        <form onSubmit={onPay} className="space-y-4">
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="amount">مبلغ پرداخت (تومان)</FieldLabel>
               <Input
                 id="amount"
                 name="amount"
@@ -75,50 +107,88 @@ export function InvoiceActions({ invoice }: InvoiceActionsProps) {
                 required
                 dir="ltr"
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="method">روش پرداخت</Label>
-              <select
-                id="method"
-                name="method"
-                className="border-input bg-background flex h-9 w-full rounded-md border px-2 text-sm"
-                defaultValue="CASH"
-              >
-                {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="note">توضیح (اختیاری)</Label>
-            <Input id="note" name="note" placeholder="مثلاً کارتخوان سامان" />
-          </div>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="method">روش پرداخت</FieldLabel>
+              <Select name="method" defaultValue="CASH">
+                <SelectTrigger id="method" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="note">توضیح (اختیاری)</FieldLabel>
+              <Input id="note" name="note" placeholder="مثلاً کارتخوان سامان" />
+            </Field>
+          </FieldGroup>
           <Button type="submit" disabled={busy} className="w-full">
+            {busy ? <Spinner /> : <CreditCard className="size-4" />}
             ثبت پرداخت
           </Button>
         </form>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {NEXT_STATUSES.filter((s) => s.status !== invoice.status).map((s) => (
-          <Button
-            key={s.status}
-            type="button"
-            variant={s.status === "CANCELLED" ? "destructive" : "outline"}
-            size="sm"
-            disabled={busy || invoice.status === "CANCELLED"}
-            onClick={() => onStatus(s.status)}
-          >
-            {s.label}
-          </Button>
-        ))}
+      <Separator />
+
+      <div className="flex flex-wrap items-center gap-2">
+        {NEXT_STATUSES.filter((item) => item.status !== invoice.status).map(
+          (item) => (
+            <Button
+              key={item.status}
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy || invoice.status === "CANCELLED"}
+              onClick={() => onStatus(item.status)}
+            >
+              <CheckCircle2 className="size-4" />
+              {item.label}
+            </Button>
+          ),
+        )}
+
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={busy || invoice.status === "CANCELLED"}
+            >
+              <Ban className="size-4" />
+              لغو فاکتور
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>لغو فاکتور {invoice.number}؟</AlertDialogTitle>
+              <AlertDialogDescription>
+                با لغو فاکتور، موجودی انبار و اسناد حساب‌داری برمی‌گردند. این کار
+                قابل بازگشت نیست.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>انصراف</AlertDialogCancel>
+              <AlertDialogAction onClick={() => onStatus("CANCELLED")}>
+                لغو فاکتور
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {error ? (
-        <p className="bg-destructive/10 text-destructive rounded-md p-2 text-sm">{error}</p>
+        <Alert variant="destructive">
+          <AlertCircle className="size-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
     </div>
   );

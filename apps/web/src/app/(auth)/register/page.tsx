@@ -4,11 +4,14 @@ export const metadata = { title: "ثبت‌نام" };
 
 export default function RegisterPage() {
   return (
-    <main className="flex min-h-full items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <h1 className="mb-6 text-center text-2xl font-bold">ثبت فروشگاه جدید</h1>
-        <RegisterForm />
+    <div className="space-y-6">
+      <div className="space-y-1 text-center">
+        <h1 className="text-xl font-bold">ثبت فروشگاه جدید</h1>
+        <p className="text-muted-foreground text-sm">
+          در چند ثانیه فروشگاه، انبار و حساب‌داری خود را راه بیندازید.
+        </p>
       </div>
-    </main>
+      <RegisterForm />
+    </div>
   );
 }

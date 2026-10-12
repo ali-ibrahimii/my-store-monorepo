@@ -1,9 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Button, Input, Label } from "@my-store/ui-kit";
+import { AlertCircle, ReceiptText } from "lucide-react";
+import { toast } from "sonner";
+
 import { createExpense } from "@my-store/api-client";
+import { Alert, AlertDescription } from "@my-store/ui-kit/components/alert";
+import { Button } from "@my-store/ui-kit/components/button";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+} from "@my-store/ui-kit/components/field";
+import { Input } from "@my-store/ui-kit/components/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@my-store/ui-kit/components/select";
+import { Spinner } from "@my-store/ui-kit/components/spinner";
 import { toInputDate } from "@my-store/shared-utils";
 import type { ExpenseCategory } from "@my-store/shared-types";
 
@@ -13,8 +31,11 @@ interface ExpenseFormProps {
 
 export function ExpenseForm({ categories }: ExpenseFormProps) {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const formRef = React.useRef<HTMLFormElement>(null);
+
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [categoryId, setCategoryId] = React.useState("");
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,9 +49,11 @@ export function ExpenseForm({ categories }: ExpenseFormProps) {
         amount: Number(form.get("amount") ?? 0),
         date: String(form.get("date") ?? "") || undefined,
         note: String(form.get("note") ?? "") || undefined,
-        categoryId: String(form.get("categoryId") ?? "") || undefined,
+        categoryId: categoryId || undefined,
       });
-      (event.target as HTMLFormElement).reset();
+      formRef.current?.reset();
+      setCategoryId("");
+      toast.success("هزینه ثبت شد");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "خطا در ثبت هزینه");
@@ -40,48 +63,55 @@ export function ExpenseForm({ categories }: ExpenseFormProps) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="title">عنوان هزینه *</Label>
+    <form ref={formRef} onSubmit={onSubmit} className="space-y-6">
+      <FieldGroup>
+        <Field>
+          <FieldLabel htmlFor="title">عنوان هزینه *</FieldLabel>
           <Input id="title" name="title" required placeholder="مثلاً قبض برق" />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="amount">مبلغ (تومان) *</Label>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="amount">مبلغ (تومان) *</FieldLabel>
           <Input id="amount" name="amount" type="number" min={1} required dir="ltr" placeholder="0" />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="date">تاریخ</Label>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="date">تاریخ</FieldLabel>
           <Input id="date" name="date" type="date" dir="ltr" defaultValue={toInputDate()} />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="categoryId">دسته‌بندی</Label>
-          <select
-            id="categoryId"
-            name="categoryId"
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            defaultValue=""
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="category">دسته‌بندی</FieldLabel>
+          <Select
+            value={categoryId || "NONE"}
+            onValueChange={(value) => setCategoryId(value === "NONE" ? "" : value)}
           >
-            <option value="">— بدون دسته —</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="note">یادداشت</Label>
+            <SelectTrigger id="category">
+              <SelectValue placeholder="بدون دسته" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="NONE">— بدون دسته —</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={category.id}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="note">یادداشت</FieldLabel>
           <Input id="note" name="note" placeholder="اختیاری" />
-        </div>
-      </div>
+        </Field>
+      </FieldGroup>
 
       {error ? (
-        <p className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{error}</p>
+        <Alert variant="destructive">
+          <AlertCircle className="size-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
-      <Button type="submit" disabled={busy}>
-        {busy ? "در حال ثبت..." : "ثبت هزینه"}
+      <Button type="submit" disabled={busy} className="w-full sm:w-auto">
+        {busy ? <Spinner /> : <ReceiptText className="size-4" />}
+        {busy ? "در حال ثبت…" : "ثبت هزینه"}
       </Button>
     </form>
   );

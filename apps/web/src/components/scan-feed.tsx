@@ -1,11 +1,43 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import * as React from "react";
 import { Radio } from "lucide-react";
-import { Badge, Card, CardContent, CardHeader, CardTitle } from "@my-store/ui-kit";
+
+import { Badge } from "@my-store/ui-kit/components/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@my-store/ui-kit/components/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@my-store/ui-kit/components/empty";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@my-store/ui-kit/components/item";
+import { ScrollArea } from "@my-store/ui-kit/components/scroll-area";
+import { Skeleton } from "@my-store/ui-kit/components/skeleton";
+import {
+  formatDateTimeJalali,
+  SCAN_TYPE_LABELS,
+  timeAgo,
+  toPersianDigits,
+} from "@my-store/shared-utils";
 import { listScanEvents, subscribeToScans } from "@my-store/api-client";
-import { formatDateTimeJalali, SCAN_TYPE_LABELS, timeAgo, toPersianDigits } from "@my-store/shared-utils";
 import type { ScanEvent } from "@my-store/shared-types";
+import { cn } from "@my-store/ui-kit/lib/utils";
 
 const MAX_ITEMS = 50;
 /** فاصله‌ی پولینگ پشتیبان — اگر SSE قطع شود چیزی از قلم نمی‌افتد. */
@@ -31,21 +63,24 @@ function mergeEvents(fresh: ScanEvent[], prev: ScanEvent[]): ScanEvent[] {
  *      محدود است، تضمین می‌کند هیچ اسکنی از قلم نیفتد
  */
 export function ScanFeed() {
-  const [events, setEvents] = useState<ScanEvent[]>([]);
-  const [connected, setConnected] = useState(false);
-  const seenIdsRef = useRef<Set<string>>(new Set());
+  const [events, setEvents] = React.useState<ScanEvent[]>([]);
+  const [loaded, setLoaded] = React.useState(false);
+  const [connected, setConnected] = React.useState(false);
+  const seenIdsRef = React.useRef<Set<string>>(new Set());
 
-  const refresh = useCallback(async () => {
+  const refresh = React.useCallback(async () => {
     try {
       const page = await listScanEvents({ pageSize: 30 });
       for (const event of page.items) seenIdsRef.current.add(event.id);
       setEvents((prev) => mergeEvents(page.items, prev));
     } catch {
       // شبکه قطع است — دور بعدی دوباره تلاش می‌کند
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
-  useEffect(() => {
+  React.useEffect(() => {
     // بارگذاری اولیه (با تأخیر صفر تا setState همزمان داخل effect نباشد)
     const initialTimer = setTimeout(() => void refresh(), 0);
 
@@ -71,55 +106,77 @@ export function ScanFeed() {
   }, [refresh]);
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            <Radio className="h-5 w-5" />
-            فید زنده اسکن‌ها
-          </span>
-          <Badge variant={connected ? "success" : "secondary"}>
-            {connected ? "آنلاین" : "در حال اتصال..."}
-          </Badge>
+        <CardTitle className="flex items-center gap-2">
+          <Radio className="size-4" />
+          فید زنده اسکن‌ها
+          <span
+            className={cn(
+              "ms-auto inline-flex size-2 rounded-full",
+              connected ? "bg-success animate-pulse" : "bg-muted-foreground/40",
+            )}
+            aria-hidden
+          />
         </CardTitle>
+        <CardDescription>
+          اسکن‌های اپ گوشی لحظه‌ای اینجا نمایش داده می‌شوند.
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        {events.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            هنوز اسکن ثبت نشده است. با اپ اسکنر (گوشی) بارکد را اسکن کنید؛
-            اینجا لحظه‌ای نمایش داده می‌شود.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {events.map((event) => (
-              <li
-                key={event.id}
-                className="flex items-start justify-between gap-3 rounded-md border p-3"
-              >
-                <div className="min-w-0">
-                  <div className="truncate font-medium">
-                    {event.product ? event.product.name : "محصول تعریف نشده"}
-                  </div>
-                  <div className="text-muted-foreground mt-0.5 text-xs" dir="ltr">
-                    {event.barcode}
-                    {event.userName ? ` · ${event.userName}` : ""}
-                    {event.device ? ` · ${event.device}` : ""}
-                  </div>
-                  <div className="text-muted-foreground mt-0.5 text-xs">
-                    {timeAgo(event.createdAt)} · {formatDateTimeJalali(event.createdAt)}
-                  </div>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  <Badge variant={event.product ? "default" : "warning"}>
-                    {SCAN_TYPE_LABELS[event.type]}
-                  </Badge>
-                  <span className="text-muted-foreground text-xs">
-                    {toPersianDigits(event.qty)} عدد
-                  </span>
-                </div>
-              </li>
+        {!loaded ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <Skeleton key={index} className="h-16 w-full rounded-md" />
             ))}
-          </ul>
+          </div>
+        ) : events.length === 0 ? (
+          <Empty className="border border-dashed">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Radio />
+              </EmptyMedia>
+              <EmptyTitle>هنوز اسکنی ثبت نشده</EmptyTitle>
+              <EmptyDescription>
+                با اپ اسکنر (گوشی) بارکد را اسکن کنید؛ نتیجه همان لحظه اینجا
+                ظاهر می‌شود.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <ScrollArea className="h-[420px] pe-3">
+            <ItemGroup>
+              {events.map((event) => (
+                <Item key={event.id} variant="outline" size="sm">
+                  <ItemMedia variant="icon">
+                    <Radio />
+                  </ItemMedia>
+                  <ItemContent>
+                    <ItemTitle>
+                      {event.product ? event.product.name : "محصول تعریف نشده"}
+                    </ItemTitle>
+                    <ItemDescription dir="ltr">
+                      {event.barcode}
+                      {event.userName ? ` · ${event.userName}` : ""}
+                      {event.device ? ` · ${event.device}` : ""}
+                    </ItemDescription>
+                    <ItemDescription>
+                      {timeAgo(event.createdAt)} ·{" "}
+                      {formatDateTimeJalali(event.createdAt)}
+                    </ItemDescription>
+                  </ItemContent>
+                  <ItemActions className="flex-col items-end gap-1">
+                    <Badge variant={event.product ? "default" : "warning"}>
+                      {SCAN_TYPE_LABELS[event.type] ?? event.type}
+                    </Badge>
+                    <span className="text-muted-foreground text-xs">
+                      {toPersianDigits(event.qty)} عدد
+                    </span>
+                  </ItemActions>
+                </Item>
+              ))}
+            </ItemGroup>
+          </ScrollArea>
         )}
       </CardContent>
     </Card>

@@ -1,14 +1,19 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Receipt } from "lucide-react";
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@my-store/ui-kit/components/card";
+
+import { InvoiceForm } from "@/components/invoice-form";
+import { InvoicesTable, type InvoiceRow } from "@/components/invoices-table";
+import { PageHeader } from "@/components/page-header";
 import { auth } from "@/lib/auth";
 import { listAllProducts, listCustomers, listInvoices } from "@/lib/repositories";
-import { InvoiceForm } from "@/components/invoice-form";
-import { Badge, Card, CardContent, CardHeader, CardTitle } from "@my-store/ui-kit";
-import {
-  formatCurrency,
-  formatDateJalali,
-  INVOICE_STATUS_LABELS,
-} from "@my-store/shared-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -24,85 +29,59 @@ export default async function InvoicesPage() {
     listAllProducts(storeId),
     listCustomers(storeId),
   ]);
-  const invoices = invoicePage.items;
+
+  const rows: InvoiceRow[] = invoicePage.items.map((invoice) => ({
+    id: invoice.id,
+    number: invoice.number,
+    customerName: invoice.customer?.name ?? null,
+    createdAt: invoice.createdAt,
+    total: Number(invoice.total),
+    paidAmount: Number(invoice.paidAmount),
+    status: invoice.status,
+  }));
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">فاکتورهای فروش</h1>
-        <p className="text-muted-foreground text-sm">ثبت فروش — موجودی و حساب‌داری خودکار به‌روز می‌شود</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="فاکتورهای فروش"
+        description="ثبت فروش — موجودی انبار و حساب‌داری خودکار به‌روز می‌شود"
+      />
 
       <div className="grid gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader>
-            <CardTitle>آخرین فاکتورها</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Receipt className="size-4" />
+              آخرین فاکتورها
+            </CardTitle>
+            <CardDescription>
+              جست‌وجو بر اساس شماره فاکتور یا مشتری، فیلتر بر اساس وضعیت
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {invoices.length === 0 ? (
-              <p className="text-muted-foreground text-sm">هنوز فاکتوری ثبت نشده است.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-right text-muted-foreground">
-                      <th className="p-2 font-medium">شماره</th>
-                      <th className="p-2 font-medium">مشتری</th>
-                      <th className="p-2 font-medium">تاریخ</th>
-                      <th className="p-2 font-medium">مبلغ</th>
-                      <th className="p-2 font-medium">پرداخت‌شده</th>
-                      <th className="p-2 font-medium">وضعیت</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {invoices.map((inv: any) => (
-                      <tr key={inv.id} className="border-b last:border-0">
-                        <td className="p-2 font-medium" dir="ltr">
-                          <Link href={`/accounting/invoices/${inv.id}`} className="text-primary underline">
-                            {inv.number}
-                          </Link>
-                        </td>
-                        <td className="p-2">{inv.customer?.name ?? "حضوری"}</td>
-                        <td className="p-2 text-muted-foreground">{formatDateJalali(inv.createdAt)}</td>
-                        <td className="p-2">{formatCurrency(Number(inv.total))}</td>
-                        <td className="p-2">{formatCurrency(Number(inv.paidAmount))}</td>
-                        <td className="p-2">
-                          <Badge
-                            variant={
-                              inv.status === "PAID"
-                                ? "success"
-                                : inv.status === "CANCELLED"
-                                  ? "destructive"
-                                  : inv.status === "DRAFT"
-                                    ? "secondary"
-                                    : "warning"
-                            }
-                          >
-                            {INVOICE_STATUS_LABELS[inv.status] ?? inv.status}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <InvoicesTable invoices={rows} />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle>فاکتور جدید</CardTitle>
+            <CardDescription>
+              آیتم‌ها را اضافه کنید؛ جمع، تخفیف و مالیات خودکار محاسبه می‌شود.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <InvoiceForm
-              products={products.map((p: any) => ({
-                id: p.id,
-                name: p.name,
-                salePrice: Number(p.salePrice),
-                stock: p.stock,
+              products={products.map((product) => ({
+                id: product.id,
+                name: product.name,
+                salePrice: Number(product.salePrice),
+                stock: Number(product.stock),
               }))}
-              customers={customers}
+              customers={customers.map((customer) => ({
+                id: customer.id,
+                name: customer.name,
+              }))}
             />
           </CardContent>
         </Card>

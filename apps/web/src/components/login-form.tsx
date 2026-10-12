@@ -1,10 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import * as React from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { Button, Input, Label } from "@my-store/ui-kit";
+import { AlertCircle, AlertTriangle, LogIn } from "lucide-react";
+
+import { Alert, AlertDescription, AlertTitle } from "@my-store/ui-kit/components/alert";
+import { Badge } from "@my-store/ui-kit/components/badge";
+import { Button } from "@my-store/ui-kit/components/button";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+} from "@my-store/ui-kit/components/field";
+import { Input } from "@my-store/ui-kit/components/input";
+import { Spinner } from "@my-store/ui-kit/components/spinner";
 
 /**
  * پیام مناسب برای هر کد خطای Auth.js.
@@ -29,15 +40,15 @@ function errorMessage(error?: string | null, code?: string | null): string | nul
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [error, setError] = useState<string | null>(
+  const [error, setError] = React.useState<string | null>(
     errorMessage(searchParams.get("error"), searchParams.get("code")),
   );
-  const [busy, setBusy] = useState(false);
-  const [dbWarning, setDbWarning] = useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [dbWarning, setDbWarning] = React.useState<string | null>(null);
 
   // اگر دیتابیس در دسترس نباشد، کاربر باید همان اول بفهمد — نه اینکه
   // فکر کند «رمز اشتباه است».
-  useEffect(() => {
+  React.useEffect(() => {
     let cancelled = false;
     fetch("/api/health", { cache: "no-store" })
       .then((res) => res.json().then((body) => ({ ok: res.ok, body })))
@@ -87,43 +98,75 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 rounded-lg border bg-card p-6 shadow-sm">
-      <div className="space-y-2">
-        <Label htmlFor="email">ایمیل</Label>
-        <Input id="email" name="email" type="email" required dir="ltr" placeholder="owner@mystore.ir" />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="password">رمز عبور</Label>
-        <Input id="password" name="password" type="password" required dir="ltr" placeholder="••••••" />
-      </div>
+    <form onSubmit={onSubmit} className="space-y-6">
+      <FieldGroup>
+        <Field>
+          <FieldLabel htmlFor="email">ایمیل</FieldLabel>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            required
+            dir="ltr"
+            autoComplete="username"
+            placeholder="owner@mystore.ir"
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="password">رمز عبور</FieldLabel>
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            required
+            dir="ltr"
+            autoComplete="current-password"
+            placeholder="••••••"
+          />
+        </Field>
+      </FieldGroup>
 
       {dbWarning ? (
-        <p className="rounded-md bg-amber-500/10 p-2 text-sm text-amber-700 dark:text-amber-400">
-          {dbWarning}{" "}
-          <a href="/api/health" className="underline" target="_blank" rel="noreferrer">
-            جزئیات
-          </a>
-        </p>
+        <Alert>
+          <AlertTriangle className="size-4" />
+          <AlertTitle>دیتابیس در دسترس نیست</AlertTitle>
+          <AlertDescription>
+            {dbWarning}{" "}
+            <a
+              href="/api/health"
+              className="underline"
+              target="_blank"
+              rel="noreferrer"
+            >
+              جزئیات
+            </a>
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       {error ? (
-        <p className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{error}</p>
+        <Alert variant="destructive">
+          <AlertCircle className="size-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
       <Button type="submit" className="w-full" disabled={busy}>
-        {busy ? "در حال ورود..." : "ورود"}
+        {busy ? <Spinner /> : <LogIn className="size-4" />}
+        {busy ? "در حال ورود…" : "ورود"}
       </Button>
 
       <p className="text-muted-foreground text-center text-sm">
         حساب ندارید؟{" "}
-        <Link href="/register" className="text-primary underline">
+        <Link href="/register" className="text-primary underline-offset-4 hover:underline">
           ثبت‌نام فروشگاه
         </Link>
       </p>
 
-      <p className="text-muted-foreground rounded-md bg-muted p-2 text-center text-xs">
-        demo: owner@mystore.ir / 123456
-      </p>
+      <div className="bg-muted text-muted-foreground flex items-center justify-center gap-2 rounded-lg p-2 text-xs">
+        <Badge variant="secondary">دمو</Badge>
+        <span dir="ltr">owner@mystore.ir / 123456</span>
+      </div>
     </form>
   );
 }

@@ -1,18 +1,24 @@
-import { ScannerDynamic } from "@/components/scanner-dynamic";
+import { ScanLine } from "lucide-react";
+
+import { Badge } from "@my-store/ui-kit/components/badge";
+import { PageHeader } from "@/components/page-header";
 import { ScanFeed } from "@/components/scan-feed";
+import { ScannerDynamic } from "@/components/scanner-dynamic";
 
 export const metadata = { title: "اسکنر" };
 
 export default function ScanPage() {
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">اسکنر بارکد</h1>
-        <p className="text-muted-foreground text-sm">
-          با دوربین گوشی محصول را اسکن کنید — ثبت فوری انجام می‌شود و روی همه دستگاه‌ها
-          به‌صورت لحظه‌ای نمایش داده می‌شود.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="اسکنر بارکد"
+        description="با دوربین گوشی محصول را اسکن کنید — ثبت فوری انجام می‌شود و روی همه دستگاه‌ها به‌صورت لحظه‌ای نمایش داده می‌شود."
+      >
+        <Badge variant="secondary" className="gap-1">
+          <ScanLine className="size-3" />
+          PWA — قابل نصب روی گوشی
+        </Badge>
+      </PageHeader>
 
       <ScannerDynamic />
 
