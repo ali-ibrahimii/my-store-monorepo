@@ -46,13 +46,16 @@ import {
 import type { Product, ScanEvent, ScanType } from "@my-store/shared-types";
 
 const SCAN_TYPES: ScanType[] = ["SALE", "CHECK_IN", "CHECK_OUT", "COUNT", "ADJUSTMENT"];
+const CASHIER_SCAN_TYPES: ScanType[] = ["SALE", "COUNT"];
 
 interface ScannerProps {
   /** Called after every successful scan record (for haptics/sounds in parent). */
   onScanned?: (event: ScanEvent) => void;
+  role?: string;
 }
 
-export function Scanner({ onScanned }: ScannerProps) {
+export function Scanner({ onScanned, role }: ScannerProps) {
+  const allowedTypes = role === "CASHIER" ? CASHIER_SCAN_TYPES : SCAN_TYPES;
   const readerRef = React.useRef<HTMLDivElement>(null);
   const qrRef = React.useRef<import("html5-qrcode").Html5Qrcode | null>(null);
   const lastCodeRef = React.useRef<{ code: string; at: number } | null>(null);
@@ -366,7 +369,7 @@ export function Scanner({ onScanned }: ScannerProps) {
                 onValueChange={(value) => setType(value as ScanType)}
               >
                 <TabsList className="h-auto flex-wrap">
-                  {SCAN_TYPES.map((scanType) => (
+                  {allowedTypes.map((scanType) => (
                     <TabsTrigger key={scanType} value={scanType}>
                       {SCAN_TYPE_LABELS[scanType]}
                     </TabsTrigger>

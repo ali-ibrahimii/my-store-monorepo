@@ -1,60 +1,205 @@
-// ============================================================
-// CLI seed:  pnpm db:seed
+// داده‌ی نمونه روی سوپابیس.
+// پیش‌نیاز: اسکیما اجرا شده باشد و .env.local پر باشد.
 //
-// داده‌ی نمونه را داخل MongoDB می‌سازد (اگر از قبل باشد، چیزی نمی‌سازد).
+//   pnpm db:seed
 //
-// نکته: `pnpm dev` خودش این کار را انجام می‌دهد؛ این اسکریپت برای
-// ریختن دستی داده (و `pnpm db:reset` که --fresh می‌دهد) است.
-// ============================================================
+// حساب‌ها:
+//   admin@mystore.ir   / 123456   مدیر
+//   cashier@mystore.ir / 123456   صندوق‌دار
 
-import { MongoClient } from "mongodb";
-import { readEnvFiles, redactMongoUri, resolveDbName, resolveMongoUri } from "@my-store/dev-db";
+import fs from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { runDemoSeed } from "./demo-seed.mjs";
+import { createClient } from "@supabase/supabase-js";
 
 const webDir = fileURLToPath(new URL("..", import.meta.url));
-// مثل Next، مقادیر .env.local/.env را می‌خوانیم تا با `pnpm dev` یکی باشد.
-// توجه: این اسکریپت فایل .env.local نمی‌سازد (کار `pnpm dev` است)؛
-// اگر نبود، مقدارهای پیش‌فرض توسعه استفاده می‌شوند.
-const env = { ...readEnvFiles(webDir), ...process.env };
 
-const uri = resolveMongoUri(env, { log: (m) => console.warn(`[seed] ${m}`) });
-const dbName = resolveDbName(uri, env);
+function loadEnv() {
+  const file = path.join(webDir, ".env.local");
+  if (!fs.existsSync(file)) return;
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (!process.env[key]) process.env[key] = value;
+  }
+}
 
-const fresh = process.argv.includes("--fresh");
-// --optional: اگر دیتابیس در دسترس نبود، فقط هشدار بده و با کد 0 خارج شو
-// (تا اسکریپت dev را متوقف نکند)
-const optional = process.argv.includes("--optional");
+loadEnv();
 
-let client;
-try {
-  client = new MongoClient(uri, { serverSelectionTimeoutMS: 10_000 });
-  await client.connect();
-  const db = client.db(dbName);
-  console.log(`[seed] متصل به ${redactMongoUri(uri)} → دیتابیس «${dbName}»`);
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!url || !key || url.includes("YOUR_PROJECT")) {
+  console.error("[seed] NEXT_PUBLIC_SUPABASE_URL و SUPABASE_SERVICE_ROLE_KEY را در apps/web/.env.local بگذارید.");
+  process.exit(1);
+}
 
-  if (fresh) {
-    console.log("[seed] --fresh: dropping database first");
-    await db.dropDatabase();
+const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+
+const PRODUCTS = [
+  ["شیر کم‌چرب", "6281111000019", "نوشیدنی", 28000, 42000, 24],
+  ["آب معدنی", "6281111000026", "نوشیدنی", 6000, 12000, 48],
+  ["نوشابه", "6281111000033", "نوشیدنی", 18000, 28000, 36],
+  ["برنج", "6281111000040", "خوراکی", 180000, 240000, 12],
+  ["چای", "6281111000057", "خوراکی", 85000, 120000, 18],
+  ["شکر", "6281111000064", "خوراکی", 42000, 58000, 20],
+  ["بیسکوییت", "6281111000071", "تنقلات", 22000, 35000, 30],
+  ["روغن", "6281111000088", "خوراکی", 96000, 135000, 14],
+  ["ماست", "6281111000095", "لبنیات", 24000, 36000, 16],
+  ["پنیر", "6281111000101", "لبنیات", 54000, 78000, 10],
+];
+
+async function ensureUser({ email, password, name, role, storeId }) {
+  const { data: existing } = await admin.from("profiles").select("id").eq("email", email).maybeSingle();
+  if (existing?.id) return existing.id;
+
+  const created = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    app_metadata: { role, store_id: storeId },
+    user_metadata: { name },
+  });
+  if (created.error || !created.data.user) {
+    throw new Error(created.error?.message ?? "ساخت کاربر ناموفق بود");
+  }
+  const inserted = await admin.from("profiles").insert({
+    id: created.data.user.id,
+    store_id: storeId,
+    name,
+    email,
+    role,
+    active: true,
+  });
+  if (inserted.error) throw new Error(inserted.error.message);
+  return created.data.user.id;
+}
+
+async function main() {
+  let storeId;
+  const found = await admin.from("stores").select("id").eq("slug", "mystore").maybeSingle();
+  if (found.error) throw new Error(found.error.message);
+  if (found.data?.id) {
+    storeId = found.data.id;
+    console.log("[seed] فروشگاه نمونه از قبل هست");
+  } else {
+    const created = await admin
+      .from("stores")
+      .insert({
+        name: "فروشگاه من",
+        slug: "mystore",
+        currency: "IRR",
+        phone: "02100000000",
+        address: "تهران",
+        tax_rate: 0,
+        invoice_prefix: "INV",
+        receipt_footer: "از خرید شما متشکریم",
+        low_stock_default: 5,
+      })
+      .select("id")
+      .single();
+    if (created.error) throw new Error(created.error.message);
+    storeId = created.data.id;
+    console.log("[seed] فروشگاه ساخته شد");
   }
 
-  const result = await runDemoSeed(db, { log: (m) => console.log(`[seed] ${m}`) });
+  const adminId = await ensureUser({
+    email: "admin@mystore.ir",
+    password: "123456",
+    name: "مدیر فروشگاه",
+    role: "ADMIN",
+    storeId,
+  });
+  await ensureUser({
+    email: "cashier@mystore.ir",
+    password: "123456",
+    name: "صندوق‌دار",
+    role: "CASHIER",
+    storeId,
+  });
 
-  if (result?.seeded && result.products) {
-    console.log("[seed] بارکدهای نمونه:");
-    for (const p of result.products) {
-      console.log(`        ${p.barcode}  ${p.name}`);
+  const categories = new Map();
+  for (const name of ["نوشیدنی", "خوراکی", "تنقلات", "لبنیات"]) {
+    const existing = await admin
+      .from("categories")
+      .select("id")
+      .eq("store_id", storeId)
+      .eq("name", name)
+      .maybeSingle();
+    if (existing.data?.id) {
+      categories.set(name, existing.data.id);
+      continue;
+    }
+    const inserted = await admin
+      .from("categories")
+      .insert({ store_id: storeId, name, slug: name })
+      .select("id")
+      .single();
+    if (inserted.error) throw new Error(inserted.error.message);
+    categories.set(name, inserted.data.id);
+  }
+
+  for (const [name, barcode, category, cost, sale, stock] of PRODUCTS) {
+    const existing = await admin
+      .from("products")
+      .select("id")
+      .eq("store_id", storeId)
+      .eq("barcode", barcode)
+      .maybeSingle();
+    if (existing.data) continue;
+    const inserted = await admin.from("products").insert({
+      store_id: storeId,
+      category_id: categories.get(category),
+      name,
+      barcode,
+      cost_price: cost,
+      sale_price: sale,
+      stock,
+      low_stock_threshold: 5,
+    });
+    if (inserted.error) throw new Error(inserted.error.message);
+  }
+
+  const customer = await admin
+    .from("customers")
+    .select("id")
+    .eq("store_id", storeId)
+    .eq("name", "مشتری نمونه")
+    .maybeSingle();
+  if (!customer.data) {
+    await admin.from("customers").insert({
+      store_id: storeId,
+      name: "مشتری نمونه",
+      phone: "09120000000",
+      address: "تهران",
+    });
+  }
+
+  for (const name of ["اجاره", "قبوض", "حمل"]) {
+    const existing = await admin
+      .from("expense_categories")
+      .select("id")
+      .eq("store_id", storeId)
+      .eq("name", name)
+      .maybeSingle();
+    if (!existing.data) {
+      await admin.from("expense_categories").insert({ store_id: storeId, name });
     }
   }
-} catch (error) {
-  console.error("[seed] ناموفق:", error?.message ?? error);
-  console.error(
-    "[seed] آیا MongoDB در حال اجراست؟\n" +
-      "        - ساده‌ترین راه:  pnpm dev   (دیتابیس را خودش بالا می‌آورد)\n" +
-      "        - دستی:           pnpm db:sandbox\n" +
-      "        - با Docker:      pnpm docker:up",
-  );
-  if (!optional) process.exitCode = 1;
-} finally {
-  if (client) await client.close().catch(() => {});
+
+  console.log("[seed] تمام شد");
+  console.log("  مدیر      admin@mystore.ir / 123456");
+  console.log("  صندوق‌دار cashier@mystore.ir / 123456");
+  console.log("  store", storeId, "admin", adminId);
 }
+
+main().catch((error) => {
+  console.error("[seed]", error.message ?? error);
+  process.exit(1);
+});

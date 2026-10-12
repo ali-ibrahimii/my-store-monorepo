@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { parseBearerToken, readMobileToken } from "@/lib/mobile-token";
+import { auth, userFromAccessToken } from "@/lib/auth";
+import { isSupabaseConfigured, missingSupabaseMessage } from "@/lib/supabase";
 import { MOBILE_TOKEN_COOKIE, hasRole } from "@my-store/shared-utils";
 import type { Role, SessionUser } from "@my-store/shared-types";
 
@@ -17,37 +17,30 @@ export function handleRouteError(error: unknown) {
   return jsonError(500, "خطای داخلی سرور");
 }
 
+function parseBearerToken(header: string | null): string | null {
+  if (!header) return null;
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+}
+
 /**
- * Resolve the current session user (with role + storeId).
- * Returns `{ user: null, response }` when unauthenticated/forbidden.
- *
- * دو راه احراز هویت پشتیبانی می‌شود:
- *   ۱) کوکی نشست Auth.js — همان چیزی که وب‌اپ می‌فرستد
- *   ۲) هدر `Authorization: Bearer <token>` — همان چیزی که اپ موبایل
- *      می‌فرستد (React Native کوکی ذخیره نمی‌کند)
- * بقیه‌ی routeها هیچ تغییری لازم ندارند: همه از همین تابع استفاده می‌کنند.
+ * کاربر جاری فروشگاه.
+ * وب با کوکی نشست سوپابیس می‌آید؛ اپ اسکنر با Bearer token
+ * (یا کوکی/هدر x-mystore-token وقتی پروکسی Authorization را حذف کند).
  */
 export async function requireStoreUser(minRole?: Role) {
-  const session = await auth();
-  const raw = session?.user;
+  if (!isSupabaseConfigured()) {
+    return {
+      user: null,
+      response: jsonError(503, missingSupabaseMessage()),
+    } as const;
+  }
 
   let user: SessionUser | null = null;
-
-  if (raw?.id && raw.storeId) {
-    user = {
-      id: raw.id,
-      email: raw.email ?? "",
-      name: raw.name ?? null,
-      role: (raw.role as Role) ?? "CASHIER",
-      storeId: raw.storeId,
-    };
+  const session = await auth();
+  if (session?.user) {
+    user = session.user;
   } else {
-    // بدون کوکی نشست → توکن موبایل را از سه جا امتحان می‌کنیم:
-    //   ۱) هدر Authorization (native و curl)
-    //   ۲) هدر x-mystore-token — پروکسی dev توکن query را به آن تبدیل
-    //      می‌کند (پروکسی بیرونی پیش‌نمایش Authorization را حذف می‌کند)
-    //   ۳) کوکی MOBILE_TOKEN_COOKIE (مرورگرهای هم‌ریشه/first‑party)
-    // (هدر/کوکی از `next/headers` خوانده می‌شود تا هیچ route ای عوض نشود.)
     const headerList = await headers().catch(() => null);
     const cookieToken =
       (await cookies().catch(() => null))?.get(MOBILE_TOKEN_COOKIE)?.value ?? null;
@@ -56,12 +49,7 @@ export async function requireStoreUser(minRole?: Role) {
       (headerList?.get("x-mystore-token")?.trim() || null) ??
       cookieToken;
     if (token) {
-      user = await readMobileToken(token);
-      // [debug] توکن رسید ولی نامعتبر/منقضی؟
-      if (!user) console.warn("[auth] 401: توکن (هدر/کوکی) رسید ولی نامعتبر/منقضی بود");
-    } else {
-      // [debug] کلاینت اصلاً توکن نفرستاده؟
-      console.warn("[auth] 401: نه کوکی نشست، نه Authorization، نه کوکی موبایل");
+      user = await userFromAccessToken(token);
     }
   }
 
@@ -80,4 +68,11 @@ export async function requireStoreUser(minRole?: Role) {
   }
 
   return { user, response: null } as const;
+}
+
+export function forbidCashier(user: SessionUser, message = "این کار فقط برای مدیر است") {
+  if (user.role !== "ADMIN") {
+    return jsonError(403, message);
+  }
+  return null;
 }

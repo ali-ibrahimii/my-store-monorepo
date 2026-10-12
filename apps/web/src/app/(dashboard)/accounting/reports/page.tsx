@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { CalendarRange, Receipt, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 
 import { Button } from "@my-store/ui-kit/components/button";
@@ -23,14 +22,23 @@ import {
   formatCurrency,
   formatDateJalali,
   LEDGER_ACCOUNT_LABELS,
+  PAYMENT_METHOD_LABELS,
+  toPersianDigits,
 } from "@my-store/shared-utils";
 
 import { PageHeader } from "@/components/page-header";
 import { SalesChart } from "@/components/sales-chart";
 import { StatCard } from "@/components/stat-card";
-import { auth } from "@/lib/auth";
+import { requireAdminPage } from "@/lib/auth";
 import { buildSalesSeries } from "@/lib/sales-series";
-import { getDailySales, getInventoryValue, getLedgerBreakdown } from "@/lib/stats";
+import {
+  getDailySales,
+  getInventoryValue,
+  getLedgerBreakdown,
+  getPaymentBreakdown,
+  getTopProducts,
+} from "@/lib/stats";
+
 
 export const dynamic = "force-dynamic";
 
@@ -41,9 +49,8 @@ type PageProps = {
 };
 
 export default async function ReportsPage({ searchParams }: PageProps) {
-  const session = await auth();
-  if (!session?.user?.storeId) redirect("/login");
-  const storeId = session.user.storeId;
+  const user = await requireAdminPage();
+  const storeId = user.storeId;
   const params = await searchParams;
 
   const now = new Date();
@@ -51,10 +58,12 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   const fromDate = params.from ? new Date(params.from) : defaultFrom;
   const toDate = params.to ? new Date(params.to + "T23:59:59.999Z") : now;
 
-  const [byAccount, dailyPoints, inventoryValue] = await Promise.all([
+  const [byAccount, dailyPoints, inventoryValue, topProducts, payments] = await Promise.all([
     getLedgerBreakdown(storeId, fromDate, toDate),
     getDailySales(storeId, fromDate, toDate),
     getInventoryValue(storeId),
+    getTopProducts(storeId, fromDate, toDate),
+    getPaymentBreakdown(storeId, fromDate, toDate),
   ]);
 
   const sum = (account: string) =>
@@ -200,6 +209,77 @@ export default async function ReportsPage({ searchParams }: PageProps) {
             <p className="text-muted-foreground mt-1 text-xs">
               مجموع موجودی × قیمت خرید همه‌ی کالاها
             </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>پرفروش‌ها</CardTitle>
+            <CardDescription>بر اساس مبلغ فروش در همین بازه</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>کالا</TableHead>
+                  <TableHead>تعداد</TableHead>
+                  <TableHead>مبلغ</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {topProducts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-muted-foreground text-center">
+                      فروشی در این بازه نیست
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  topProducts.map((product) => (
+                    <TableRow key={product.productId}>
+                      <TableCell>{product.name}</TableCell>
+                      <TableCell>{toPersianDigits(product.qty)}</TableCell>
+                      <TableCell>{formatCurrency(product.revenue)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>روش‌های پرداخت</CardTitle>
+            <CardDescription>نقد، کارت، واریز و نسیه</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>روش</TableHead>
+                  <TableHead>تعداد</TableHead>
+                  <TableHead>مبلغ</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {payments.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-muted-foreground text-center">
+                      پرداختی ثبت نشده
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  payments.map((payment) => (
+                    <TableRow key={payment.method}>
+                      <TableCell>{PAYMENT_METHOD_LABELS[payment.method] ?? payment.method}</TableCell>
+                      <TableCell>{toPersianDigits(payment.count)}</TableCell>
+                      <TableCell>{formatCurrency(payment.amount)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </div>

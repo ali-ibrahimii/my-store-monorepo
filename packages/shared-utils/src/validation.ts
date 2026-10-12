@@ -40,6 +40,44 @@ export const customerSchema = z.object({
   name: z.string().min(2, "نام مشتری را وارد کنید"),
   phone: z.string().trim().optional().or(z.literal("")),
   address: z.string().trim().optional().or(z.literal("")),
+  note: z.string().trim().optional().or(z.literal("")),
+});
+
+export const storeSettingsSchema = z.object({
+  name: z.string().min(2, "نام فروشگاه را وارد کنید"),
+  phone: z.string().trim().optional().or(z.literal("")),
+  address: z.string().trim().optional().or(z.literal("")),
+  email: z.string().trim().optional().or(z.literal("")),
+  currency: z.string().trim().min(2).max(8).optional(),
+  taxRate: z.coerce.number().min(0).max(100).optional(),
+  invoicePrefix: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9-]{1,8}$/, "پیشوند فاکتور فقط حروف و عدد")
+    .optional(),
+  receiptFooter: z.string().trim().max(240).optional().or(z.literal("")),
+  lowStockDefault: z.coerce.number().int().min(0).max(10000).optional(),
+});
+
+export const staffSchema = z.object({
+  name: z.string().min(2, "نام را وارد کنید"),
+  email: z.string().email("ایمیل معتبر نیست"),
+  password: z.string().min(6, "رمز عبور حداقل ۶ کاراکتر"),
+});
+
+export const purchaseSchema = z.object({
+  supplier: z.string().trim().optional().or(z.literal("")),
+  note: z.string().trim().optional().or(z.literal("")),
+  paidAmount: z.coerce.number().min(0).optional(),
+  items: z
+    .array(
+      z.object({
+        productId: z.string().min(1),
+        qty: z.coerce.number().int().positive(),
+        unitCost: z.coerce.number().min(0),
+      }),
+    )
+    .min(1, "حداقل یک قلم خرید لازم است"),
 });
 
 export const invoiceItemSchema = z.object({

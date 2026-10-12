@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -46,7 +45,7 @@ import { InvoiceStatusBadge } from "@/components/invoice-status-badge";
 import { SalesChart } from "@/components/sales-chart";
 import { ScanFeed } from "@/components/scan-feed";
 import { StatCard } from "@/components/stat-card";
-import { auth } from "@/lib/auth";
+import { requirePageUser } from "@/lib/auth";
 import { listInvoices, listProducts } from "@/lib/repositories";
 import { buildSalesSeries, daysAgo } from "@/lib/sales-series";
 import { getDailySales, getSummary } from "@/lib/stats";
@@ -56,9 +55,9 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "داشبورد" };
 
 export default async function DashboardPage() {
-  const session = await auth();
-  if (!session?.user?.storeId) redirect("/login");
-  const storeId = session.user.storeId;
+  const user = await requirePageUser();
+  const storeId = user.storeId;
+  const isAdmin = user.role === "ADMIN";
 
   const now = new Date();
   const weekStart = daysAgo(7, now);
@@ -106,22 +105,41 @@ export default async function DashboardPage() {
           hint={`فروش ۷ روز: ${formatCurrency(weekRevenue)}`}
           icon={Wallet}
         />
-        <StatCard
-          title="سود خالص امروز"
-          value={formatCurrency(summary.netProfitToday)}
-          hint={`هزینه امروز: ${formatCurrency(summary.todayExpenses)}`}
-          icon={TrendingUp}
-          tone={summary.netProfitToday >= 0 ? "success" : "danger"}
-        />
-        <StatCard
-          title="ارزش موجودی انبار"
-          value={formatCurrency(summary.inventoryValue)}
-          hint={`${toPersianDigits(productCount)} قلم کالا`}
-          icon={Package}
-        />
+        {isAdmin ? (
+          <StatCard
+            title="سود خالص امروز"
+            value={formatCurrency(summary.netProfitToday)}
+            hint={`هزینه امروز: ${formatCurrency(summary.todayExpenses)}`}
+            icon={TrendingUp}
+            tone={summary.netProfitToday >= 0 ? "success" : "danger"}
+          />
+        ) : (
+          <StatCard
+            title="نقش شما"
+            value="صندوق‌دار"
+            hint="تغییر قیمت و گزارش سود برای مدیر است"
+            icon={Receipt}
+          />
+        )}
+        {isAdmin ? (
+          <StatCard
+            title="ارزش موجودی انبار"
+            value={formatCurrency(summary.inventoryValue)}
+            hint={`${toPersianDigits(productCount)} قلم کالا`}
+            icon={Package}
+          />
+        ) : (
+          <StatCard
+            title="تعداد کالا"
+            value={toPersianDigits(productCount)}
+            hint="قیمت خرید برای صندوق‌دار پنهان است"
+            icon={Package}
+          />
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {isAdmin ? (
         <StatCard
           title="سود خالص این ماه"
           value={formatCurrency(summary.netProfitMonth)}
@@ -129,6 +147,7 @@ export default async function DashboardPage() {
           icon={TrendingUp}
           tone={summary.netProfitMonth >= 0 ? "success" : "danger"}
         />
+        ) : null}
         <StatCard
           title="فاکتورهای پرداخت‌نشده"
           value={formatCurrency(summary.unpaidInvoicesAmount)}

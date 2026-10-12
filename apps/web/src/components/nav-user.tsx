@@ -1,6 +1,6 @@
 "use client";
 
-import { signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { ChevronsUpDown, LogOut } from "lucide-react";
 import { ROLE_LABELS } from "@my-store/shared-utils";
 
@@ -28,6 +28,7 @@ interface NavUserProps {
 
 /** کاربر جاری در پایین سایدبار — منوی shadcn با خروج از حساب. */
 export function NavUser({ name, email, role }: NavUserProps) {
+  const router = useRouter();
   const { isMobile } = useSidebar();
   const label = name?.trim() || email;
   const initials = label.slice(0, 2).toUpperCase();
@@ -73,7 +74,13 @@ export function NavUser({ name, email, role }: NavUserProps) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })}>
+            <DropdownMenuItem
+              onClick={async () => {
+                await fetch("/api/auth/logout", { method: "POST" });
+                router.push("/login");
+                router.refresh();
+              }}
+            >
               <LogOut className="size-4" />
               خروج از حساب
             </DropdownMenuItem>

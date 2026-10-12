@@ -54,6 +54,7 @@ import type { MobileSession, ScanEvent, ScanType } from "@my-store/shared-types"
 import { clearSession } from "../lib/api";
 
 const SCAN_TYPES: ScanType[] = ["SALE", "CHECK_IN", "CHECK_OUT", "COUNT", "ADJUSTMENT"];
+const CASHIER_SCAN_TYPES: ScanType[] = ["SALE", "COUNT"];
 
 interface ScannerScreenProps {
   session: MobileSession;
@@ -61,6 +62,7 @@ interface ScannerScreenProps {
 }
 
 export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
+  const allowedTypes = session.user.role === "ADMIN" ? SCAN_TYPES : CASHIER_SCAN_TYPES;
   const regionRef = useRef<HTMLDivElement>(null);
   const qrRef = useRef<import("html5-qrcode").Html5Qrcode | null>(null);
   const lastCodeRef = useRef<{ code: string; at: number } | null>(null);
@@ -272,7 +274,7 @@ export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
         <CardContent className="space-y-3 p-3">
           <Tabs value={scanType} onValueChange={(value) => setScanType(value as ScanType)}>
             <TabsList className="h-auto w-full flex-wrap">
-              {SCAN_TYPES.map((type) => (
+              {allowedTypes.map((type) => (
                 <TabsTrigger key={type} value={type}>
                   {SCAN_TYPE_LABELS[type]}
                 </TabsTrigger>

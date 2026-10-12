@@ -1,93 +1,59 @@
-// ============================================================
-// Auth.js (next-auth v5) — ورود با ایمیل و رمز عبور
-//
-// استراتژی session = JWT، یعنی هیچ جدول/کالکشن session ای لازم نیست
-// و به همین دلیل adapter دیتابیس هم لازم نیست.
-// تنها کاری که با MongoDB انجام می‌دهیم: پیدا کردن کاربر و
-// مقایسه‌ی رمز با bcrypt است.
-// ============================================================
+import type { Role, SessionUser } from "@my-store/shared-types";
+import { redirect } from "next/navigation";
 
-import NextAuth from "next-auth";
-import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
-import authConfig from "@/auth.config";
-import { collections, idOf } from "@/lib/db";
-import { resolveAuthSecret } from "@/lib/auth-secret";
-import {
-  AuthServerError,
-  DatabaseUnavailableError,
-  isDatabaseConnectionError,
-} from "@/lib/auth-errors";
+import { assertData, createSupabaseServer, getAdmin, isSupabaseConfigured } from "@/lib/supabase";
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  ...authConfig,
-  // همان رازی که proxy.ts استفاده می‌کند (وگرنه نشست در Proxy خوانده نمی‌شود)
-  secret: resolveAuthSecret(),
-  // اپلیکیشن پشت پروکسی/دامنه‌های مختلف (مثل پیش‌نمایش) هم باید کار کند
-  trustHost: true,
-  session: { strategy: "jwt" },
-  providers: [
-    Credentials({
-      name: "credentials",
-      credentials: {
-        email: { label: "ایمیل", type: "email" },
-        password: { label: "رمز عبور", type: "password" },
-      },
-      async authorize(credentials) {
-        const email = String(credentials?.email ?? "")
-          .toLowerCase()
-          .trim();
-        const password = String(credentials?.password ?? "");
-        if (!email || !password) return null;
+interface ProfileRow {
+  id: string;
+  name: string | null;
+  email: string;
+  role: Role;
+  store_id: string;
+  active: boolean;
+}
 
-        let user;
-        try {
-          const { users } = await collections();
-          user = await users.findOne({ email });
-        } catch (error) {
-          // ⚠️ خطای دیتابیس ≠ رمز اشتباه؛ کد جداگانه برمی‌گردانیم تا
-          // صفحه‌ی ورود پیام درست («دیتابیس در دسترس نیست») نشان دهد.
-          console.error("[auth] db error:", (error as Error)?.message ?? error);
-          throw isDatabaseConnectionError(error) ? new DatabaseUnavailableError() : new AuthServerError();
-        }
+export async function loadSessionUser(userId: string): Promise<SessionUser | null> {
+  const result = await getAdmin()
+    .from("profiles")
+    .select("id, name, email, role, store_id, active")
+    .eq("id", userId)
+    .maybeSingle();
+  const row = assertData(result) as ProfileRow | null;
+  if (!row?.active) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role,
+    storeId: row.store_id,
+  };
+}
 
-        if (!user?.passwordHash) return null;
+export async function userFromAccessToken(token: string): Promise<SessionUser | null> {
+  const { data, error } = await getAdmin().auth.getUser(token);
+  if (error || !data.user) return null;
+  return loadSessionUser(data.user.id);
+}
 
-        try {
-          const ok = await bcrypt.compare(password, user.passwordHash);
-          if (!ok) return null;
-        } catch (error) {
-          console.error("[auth] password check failed:", (error as Error)?.message ?? error);
-          throw new AuthServerError();
-        }
+/** کاربر جاری از کوکی نشست سوپابیس. شکل خروجی با صفحه‌های قبلی سازگار است. */
+export async function auth(): Promise<{ user: SessionUser } | null> {
+  if (!isSupabaseConfigured()) return null;
+  const supabase = await createSupabaseServer();
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) return null;
+  const user = await loadSessionUser(data.user.id);
+  if (!user) return null;
+  return { user };
+}
 
-        return {
-          id: idOf(user._id),
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          storeId: idOf(user.storeId),
-        };
-      },
-    }),
-  ],
-  callbacks: {
-    ...authConfig.callbacks,
-    async jwt({ token, user }) {
-      if (user) {
-        const u = user as { role?: unknown; storeId?: unknown };
-        token.role = typeof u.role === "string" ? u.role : "CASHIER";
-        token.storeId = typeof u.storeId === "string" ? u.storeId : "";
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = String(token.sub ?? "");
-        session.user.role = typeof token.role === "string" ? token.role : "CASHIER";
-        session.user.storeId = typeof token.storeId === "string" ? token.storeId : "";
-      }
-      return session;
-    },
-  },
-});
+export async function requirePageUser(): Promise<SessionUser> {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  return session.user;
+}
+
+export async function requireAdminPage(): Promise<SessionUser> {
+  const user = await requirePageUser();
+  if (user.role !== "ADMIN") redirect("/dashboard");
+  return user;
+}

@@ -9,6 +9,6 @@ const Scanner = dynamic(
   { ssr: false },
 );
 
-export function ScannerDynamic() {
-  return <Scanner />;
+export function ScannerDynamic({ role }: { role?: string }) {
+  return <Scanner role={role} />;
 }

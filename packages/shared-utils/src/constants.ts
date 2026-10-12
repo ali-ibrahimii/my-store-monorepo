@@ -23,15 +23,20 @@ export const API_ROUTES = {
   reportsProfitLoss: "/api/reports/profit-loss",
   reportsSales: "/api/reports/sales",
   register: "/api/auth/register",
+  login: "/api/auth/login",
+  logout: "/api/auth/logout",
   /** سلامت سرور + دیتابیس (بدون نیاز به نشست) */
   health: "/api/health",
-  /**
-   * ورود اپ موبایل: برخلاف وب (که کوکی نشست می‌گیرد) یک توکن Bearer
-   * برمی‌گرداند، چون React Native کوکی ذخیره نمی‌کند.
-   */
-  mobileLogin: "/api/auth/mobile/login",
-  /** اعتبارسنجی توکن موبایل و گرفتن کاربر جاری */
-  mobileSession: "/api/auth/mobile/session",
+  /** ورود اپ اسکنر — توکن Bearer سوپابیس برمی‌گرداند */
+  scannerLogin: "/api/auth/token",
+  scannerSession: "/api/auth/session",
+  settings: "/api/settings",
+  staff: "/api/staff",
+  purchases: "/api/purchases",
+  ledger: "/api/reports/ledger",
+  /** نام‌های قدیمی؛ همان مسیر اسکنر */
+  mobileLogin: "/api/auth/token",
+  mobileSession: "/api/auth/session",
 } as const;
 
 /**
@@ -44,8 +49,7 @@ export const MOBILE_TOKEN_COOKIE = "mystore_mobile_token";
 
 /** Roles, most privileged first. */
 export const ROLE_LEVEL: Record<string, number> = {
-  OWNER: 3,
-  ACCOUNTANT: 2,
+  ADMIN: 2,
   CASHIER: 1,
 };
 
@@ -54,8 +58,7 @@ export function hasRole(role: string, minimum: string): boolean {
 }
 
 export const ROLE_LABELS: Record<string, string> = {
-  OWNER: "مالک",
-  ACCOUNTANT: "حسابدار",
+  ADMIN: "مدیر",
   CASHIER: "صندوق‌دار",
 };
 

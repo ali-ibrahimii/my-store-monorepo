@@ -39,6 +39,7 @@ import type { Invoice, InvoiceStatus, PaymentMethod } from "@my-store/shared-typ
 
 interface InvoiceActionsProps {
   invoice: Invoice;
+  canManage?: boolean;
 }
 
 const NEXT_STATUSES: { status: InvoiceStatus; label: string }[] = [
@@ -46,7 +47,7 @@ const NEXT_STATUSES: { status: InvoiceStatus; label: string }[] = [
   { status: "PAID", label: "ثبت به‌عنوان پرداخت‌شده" },
 ];
 
-export function InvoiceActions({ invoice }: InvoiceActionsProps) {
+export function InvoiceActions({ invoice, canManage = false }: InvoiceActionsProps) {
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -138,22 +139,23 @@ export function InvoiceActions({ invoice }: InvoiceActionsProps) {
       <Separator />
 
       <div className="flex flex-wrap items-center gap-2">
-        {NEXT_STATUSES.filter((item) => item.status !== invoice.status).map(
-          (item) => (
-            <Button
-              key={item.status}
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy || invoice.status === "CANCELLED"}
-              onClick={() => onStatus(item.status)}
-            >
-              <CheckCircle2 className="size-4" />
-              {item.label}
-            </Button>
-          ),
-        )}
+        {canManage
+          ? NEXT_STATUSES.filter((item) => item.status !== invoice.status).map((item) => (
+              <Button
+                key={item.status}
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy || invoice.status === "CANCELLED"}
+                onClick={() => onStatus(item.status)}
+              >
+                <CheckCircle2 className="size-4" />
+                {item.label}
+              </Button>
+            ))
+          : null}
 
+        {canManage ? (
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button
@@ -182,6 +184,7 @@ export function InvoiceActions({ invoice }: InvoiceActionsProps) {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        ) : null}
       </div>
 
       {error ? (

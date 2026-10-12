@@ -1,8 +1,4 @@
-// ============================================================
-// User & Auth types (shared between web, mobile and api-client)
-// ============================================================
-
-export const ROLES = ["OWNER", "ACCOUNTANT", "CASHIER"] as const;
+export const ROLES = ["ADMIN", "CASHIER"] as const;
 export type Role = (typeof ROLES)[number];
 
 export interface User {
@@ -11,11 +7,11 @@ export interface User {
   email: string;
   role: Role;
   storeId: string;
+  active?: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
-/** The user object attached to the session (next-auth). */
 export interface SessionUser {
   id: string;
   name: string | null;
@@ -29,8 +25,28 @@ export interface Store {
   name: string;
   slug: string;
   currency: string;
+  phone: string | null;
+  address: string | null;
+  email: string | null;
+  /** درصد مالیات پیش‌فرض، مثلاً ۹ */
+  taxRate: number;
+  invoicePrefix: string;
+  receiptFooter: string | null;
+  lowStockDefault: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface UpdateStoreInput {
+  name: string;
+  phone?: string;
+  address?: string;
+  email?: string;
+  currency?: string;
+  taxRate?: number;
+  invoicePrefix?: string;
+  receiptFooter?: string;
+  lowStockDefault?: number;
 }
 
 export interface RegisterInput {
@@ -45,16 +61,27 @@ export interface LoginInput {
   password: string;
 }
 
-/**
- * پاسخ `POST /api/auth/mobile/login`.
- *
- * وب با کوکی نشست کار می‌کند، ولی React Native کوکی ذخیره نمی‌کند؛
- * برای همین اپ موبایل یک توکن Bearer می‌گیرد و در هر درخواست
- * `Authorization: Bearer <token>` می‌فرستد.
- */
-export interface MobileSession {
+/** نشست اپ اسکنر — توکن سوپابیس، نه کوکی. */
+export interface ScannerSession {
   token: string;
   user: SessionUser;
-  /** ISO timestamp — زمان انقضای توکن */
   expiresAt: string;
+}
+
+/** @deprecated نام قدیمی اپ موبایل؛ همان ScannerSession است. */
+export type MobileSession = ScannerSession;
+
+export interface StaffMember {
+  id: string;
+  name: string | null;
+  email: string;
+  role: Role;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface CreateStaffInput {
+  name: string;
+  email: string;
+  password: string;
 }

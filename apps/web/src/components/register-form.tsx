@@ -3,7 +3,6 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
 import { AlertCircle, Store } from "lucide-react";
 
 import { apiPost } from "@my-store/api-client";
@@ -41,11 +40,6 @@ export function RegisterForm() {
         password,
       });
 
-      const result = await signIn("credentials", { email, password, redirect: false });
-      if (result?.error) {
-        router.push("/login");
-        return;
-      }
       router.push("/dashboard");
       router.refresh();
     } catch (e) {

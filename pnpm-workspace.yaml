@@ -1,11 +1,7 @@
 packages:
   - 'apps/*'
-  # اپ Expo ریشه‌اش یک پوشه پایین‌تر است (apps/mobile/src شامل app.json و app/ است)
-  - 'apps/mobile/src'
   - 'packages/*'
-  - 'tooling/*'
 
-# Postinstall scripts we trust (moved here from the stray apps/web/pnpm-workspace.yaml)
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver

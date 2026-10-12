@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
-import { collections, idOf, idOrEmpty } from "@/lib/db";
-import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
+
+import { forbidCashier, handleRouteError, requireStoreUser } from "@/lib/api-helpers";
 import { generateUniqueBarcode } from "@/lib/barcode-service";
-import { listProducts, mapCategories } from "@/lib/repositories";
-import { productDTO } from "@/lib/serialize";
-import { productSchema, normalizeBarcode } from "@my-store/shared-utils";
+import { listProducts } from "@/lib/repositories";
+import { productDTO, redactProduct, type ProductRow } from "@/lib/serialize";
+import { assertData, getAdmin } from "@/lib/supabase";
+import { normalizeBarcode, productSchema } from "@my-store/shared-utils";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/products?search=&categoryId=&lowStock=&page=&pageSize= */
 export async function GET(request: Request) {
   try {
     const { user, response } = await requireStoreUser();
@@ -20,21 +19,25 @@ export async function GET(request: Request) {
       search: searchParams.get("search")?.trim() || undefined,
       categoryId: searchParams.get("categoryId") || undefined,
       lowStock: searchParams.get("lowStock") === "1",
+      outOfStock: searchParams.get("outOfStock") === "1",
       page: Number(searchParams.get("page")) || 1,
       pageSize: Number(searchParams.get("pageSize")) || 20,
     });
-
-    return NextResponse.json(page);
+    return NextResponse.json({
+      ...page,
+      items: page.items.map((item) => redactProduct(item, user.role)),
+    });
   } catch (error) {
     return handleRouteError(error);
   }
 }
 
-/** POST /api/products */
 export async function POST(request: Request) {
   try {
-    const { user, response } = await requireStoreUser();
+    const { user, response } = await requireStoreUser("ADMIN");
     if (!user) return response;
+    const denied = forbidCashier(user);
+    if (denied) return denied;
 
     const body = await request.json();
     const parsed = productSchema.safeParse(body);
@@ -45,45 +48,51 @@ export async function POST(request: Request) {
       );
     }
     const data = parsed.data;
-
-    const { products } = await collections();
     const provided = normalizeBarcode(data.barcode ?? "");
-
-    // بارکد خالی؟ خودمان یک EAN-13 معتبر و یکتا می‌سازیم
-    // («ثبت محصول جدید = بارکد خودکار»، هم از وب هم از موبایل).
     const barcode = provided || (await generateUniqueBarcode(user.storeId));
 
-    const exists = await products.findOne({ storeId: user.storeId, barcode });
-    if (exists) {
-      return NextResponse.json(
-        { error: "محصولی با این بارکد قبلاً ثبت شده است" },
-        { status: 409 },
-      );
+    const clash = await getAdmin()
+      .from("products")
+      .select("id")
+      .eq("store_id", user.storeId)
+      .eq("barcode", barcode)
+      .maybeSingle();
+    if (clash.data) {
+      return NextResponse.json({ error: "محصولی با این بارکد قبلاً ثبت شده است" }, { status: 409 });
     }
 
-    const now = new Date();
-    const _id = new ObjectId();
-    const categoryId = idOrEmpty(data.categoryId) || null;
-
-    await products.insertOne({
-      _id,
-      storeId: user.storeId,
-      name: data.name,
-      barcode,
-      sku: data.sku || null,
-      description: data.description || null,
-      costPrice: Number(data.costPrice ?? 0),
-      salePrice: Number(data.salePrice ?? 0),
-      stock: Number(data.stock ?? 0),
-      lowStockThreshold: Number(data.lowStockThreshold ?? 5),
-      categoryId,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const doc = await products.findOne({ _id });
-    const cats = await mapCategories(user.storeId, [categoryId]);
-    return NextResponse.json(productDTO(doc!, cats.get(idOf(categoryId))), { status: 201 });
+    const inserted = await getAdmin()
+      .from("products")
+      .insert({
+        store_id: user.storeId,
+        name: data.name,
+        barcode,
+        sku: data.sku || null,
+        description: data.description || null,
+        cost_price: Number(data.costPrice ?? 0),
+        sale_price: Number(data.salePrice ?? 0),
+        stock: Number(data.stock ?? 0),
+        low_stock_threshold: Number(data.lowStockThreshold ?? 5),
+        category_id: data.categoryId || null,
+      })
+      .select(
+        `id, name, sku, barcode, description, cost_price, sale_price, stock, low_stock_threshold,
+         category_id, store_id, created_at, updated_at, categories(id, name, slug, store_id, created_at, updated_at)`,
+      )
+      .single();
+    const row = assertData(inserted) as unknown as ProductRow;
+    if (Number(data.stock ?? 0) > 0) {
+      await getAdmin().from("inventory_movements").insert({
+        store_id: user.storeId,
+        product_id: row.id,
+        type: "ADJUSTMENT",
+        qty: Number(data.stock),
+        ref_type: "product",
+        ref_id: row.id,
+        note: "موجودی اولیه",
+      });
+    }
+    return NextResponse.json(productDTO(row), { status: 201 });
   } catch (error) {
     return handleRouteError(error);
   }

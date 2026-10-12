@@ -1,5 +1,4 @@
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 
 import { SidebarInset, SidebarProvider } from "@my-store/ui-kit/components/sidebar";
 
@@ -7,52 +6,46 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { DbOfflineNotice } from "@/components/db-offline-notice";
 import { PwaRegister } from "@/components/pwa-register";
 import { SiteHeader } from "@/components/site-header";
-import { auth } from "@/lib/auth";
-import { pingDatabase } from "@/lib/db";
-
-/**
- * در محیط توسعه، اگر دیتابیس در دسترس نباشد اینجا (و فقط اینجا) یک پیام
- * روشن نشان می‌دهیم — وگرنه هر صفحه با خطای خام MongoDB می‌افتد و کاربر
- * فکر می‌کند «سرور کار نمی‌کند».
- * در production این بررسی انجام نمی‌شود (هزینه‌ی اضافه ندارد).
- */
-async function databaseStatus(): Promise<{ down: boolean; detail?: string }> {
-  if (process.env.NODE_ENV === "production") return { down: false };
-
-  try {
-    const result = await pingDatabase(2500);
-    if (!result.ok) return { down: true, detail: result.error };
-  } catch {
-    // اگر خودِ بررسی خطا داد، صفحه را متوقف نمی‌کنیم
-  }
-  return { down: false };
-}
+import { requirePageUser } from "@/lib/auth";
+import { getStore } from "@/lib/repositories";
+import { pingDatabase } from "@/lib/supabase";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
-  if (!session?.user) {
-    redirect("/login");
-  }
-
-  const [db, cookieStore] = await Promise.all([databaseStatus(), cookies()]);
-  // سایدبار shadcn وضعیتش را در کوکی نگه می‌دارد تا سمت سرور هم خوانده شود.
+  const user = await requirePageUser();
+  const cookieStore = await cookies();
   const defaultOpen = cookieStore.get("sidebar_state")?.value !== "false";
+
+  let dbDown = false;
+  let detail: string | undefined;
+  let storeName = "فروشگاه من";
+  try {
+    const [ping, store] = await Promise.all([pingDatabase(2500), getStore(user.storeId)]);
+    if (!ping.ok) {
+      dbDown = true;
+      detail = ping.error;
+    }
+    if (store?.name) storeName = store.name;
+  } catch (error) {
+    dbDown = true;
+    detail = error instanceof Error ? error.message : String(error);
+  }
 
   return (
     <SidebarProvider defaultOpen={defaultOpen}>
       <AppSidebar
-        userName={session.user.name ?? null}
-        userEmail={session.user.email ?? ""}
-        role={session.user.role}
+        userName={user.name}
+        userEmail={user.email}
+        role={user.role}
+        storeName={storeName}
       />
       <SidebarInset>
         <SiteHeader />
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
-          {db.down ? <DbOfflineNotice detail={db.detail} /> : children}
+          {dbDown ? <DbOfflineNotice detail={detail} /> : children}
         </div>
       </SidebarInset>
       <PwaRegister />

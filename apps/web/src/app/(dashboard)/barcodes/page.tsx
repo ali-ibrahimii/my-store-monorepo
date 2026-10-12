@@ -1,12 +1,11 @@
-import { redirect } from "next/navigation";
 import { Barcode } from "lucide-react";
 
 import { Badge } from "@my-store/ui-kit/components/badge";
-import { toPersianDigits, storeCodeFromId, hasRole } from "@my-store/shared-utils";
+import { toPersianDigits, storeCodeFromId } from "@my-store/shared-utils";
 
 import { BarcodeStudio, type BarcodeStudioProduct } from "@/components/barcode-studio";
 import { PageHeader } from "@/components/page-header";
-import { auth } from "@/lib/auth";
+import { requireAdminPage } from "@/lib/auth";
 import { listAllProducts } from "@/lib/repositories";
 
 export const dynamic = "force-dynamic";
@@ -18,12 +17,11 @@ export default async function BarcodesPage({
 }: {
   searchParams: Promise<{ product?: string }>;
 }) {
-  const session = await auth();
-  if (!session?.user?.storeId) redirect("/login");
+  const user = await requireAdminPage();
 
   const { product: focusProductId } = await searchParams;
 
-  const storeId = session.user.storeId;
+  const storeId = user.storeId;
   const products = await listAllProducts(storeId);
 
   const rows: BarcodeStudioProduct[] = products.map((product) => ({
@@ -61,7 +59,7 @@ export default async function BarcodesPage({
         key={focusProductId ?? "all"}
         products={rows}
         storeCode={storeCodeFromId(storeId)}
-        canEdit={hasRole(session.user.role, "ACCOUNTANT")}
+        canEdit
         focusProductId={focusProductId}
       />
     </div>

@@ -27,6 +27,11 @@ const SECTION_LABELS: Record<string, string> = {
   expenses: "هزینه‌ها",
   reports: "گزارش‌ها",
   invoices: "جزئیات فاکتور",
+  settings: "تنظیمات",
+  staff: "کاربران",
+  purchases: "خرید کالا",
+  ledger: "دفتر کل",
+  inventory: "حرکت انبار",
 };
 
 const SEGMENT_HREF: Record<string, string> = {
@@ -38,6 +43,11 @@ const SEGMENT_HREF: Record<string, string> = {
   accounting: "/accounting",
   expenses: "/accounting/expenses",
   reports: "/accounting/reports",
+  settings: "/settings",
+  staff: "/staff",
+  purchases: "/purchases",
+  ledger: "/accounting/ledger",
+  inventory: "/inventory",
 };
 
 export function SiteHeader() {

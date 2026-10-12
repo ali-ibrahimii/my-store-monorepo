@@ -27,9 +27,10 @@ import type { ExpenseCategory } from "@my-store/shared-types";
 
 interface ExpenseFormProps {
   categories: ExpenseCategory[];
+  onCreated?: () => void;
 }
 
-export function ExpenseForm({ categories }: ExpenseFormProps) {
+export function ExpenseForm({ categories, onCreated }: ExpenseFormProps) {
   const router = useRouter();
   const formRef = React.useRef<HTMLFormElement>(null);
 
@@ -54,6 +55,7 @@ export function ExpenseForm({ categories }: ExpenseFormProps) {
       formRef.current?.reset();
       setCategoryId("");
       toast.success("هزینه ثبت شد");
+      onCreated?.();
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "خطا در ثبت هزینه");
