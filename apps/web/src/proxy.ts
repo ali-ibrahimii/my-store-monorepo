@@ -1,33 +1,30 @@
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import NextAuth from "next-auth";
-import authConfig from "@/auth.config";
-import { resolveAuthSecret } from "@/lib/auth-secret";
 
-/**
- * Next.js 16 "Proxy" (formerly middleware).
- * Runs on the Edge runtime, so it only verifies the JWT via auth.config.ts.
- * MongoDB-backed helpers (roles, store data) live in lib/auth.ts.
- *
- * دو کار می‌کند:
- *   ۱) محافظت از صفحه‌های داشبورد (بدون نشست → /login)
- *   ۲) CORS برای API — اپ اسکنر روی دامنه‌ی جدا deploy می‌شود
- *      (مثلاً scan.vercel.app) و باید بتواند cross-origin به API
- *      درخواست بزند (Bearer token، بدون کوکی).
- *
- * ⚠️ `secret` باید همان رازی باشد که lib/auth.ts با آن JWT را امضا می‌کند.
- */
-const { auth } = NextAuth({
-  ...authConfig,
-  secret: resolveAuthSecret(),
-  trustHost: true,
-});
+const PROTECTED = [
+  "/dashboard",
+  "/products",
+  "/scan",
+  "/accounting",
+  "/customers",
+  "/barcodes",
+  "/settings",
+  "/staff",
+  "/purchases",
+  "/inventory",
+];
 
-// ------------------------------------------------------------
-// CORS
-// ------------------------------------------------------------
-// دامنه‌های مجاز: لیست جدا‌شده با کاما در CORS_ORIGINS.
-// اگر ست نشود، همه‌ی originها مجازند (`*`) — برای API با Bearer token
-// بی‌خطر است چون کوکی/credentials در کار نیست.
+const ADMIN_ONLY = [
+  "/settings",
+  "/staff",
+  "/purchases",
+  "/inventory",
+  "/barcodes",
+  "/accounting/expenses",
+  "/accounting/reports",
+  "/accounting/ledger",
+];
+
 const CORS_ALLOWED_ORIGINS = (process.env.CORS_ORIGINS ?? "*")
   .split(",")
   .map((s) => s.trim().replace(/\/$/, ""))
@@ -42,46 +39,108 @@ function corsHeadersFor(origin: string | null): Record<string, string> | null {
     "Access-Control-Allow-Methods": "GET,POST,PATCH,PUT,DELETE,OPTIONS",
     "Access-Control-Allow-Headers": "authorization, content-type, x-mystore-token",
     "Access-Control-Max-Age": "86400",
-    // وقتی origin را echo می‌کنیم، کش مرورگر باید per-origin باشد
     ...(allowAny ? {} : { Vary: "Origin" }),
   };
 }
 
-const authProxy = auth as unknown as (req: NextRequest) => Response | Promise<Response | void> | void;
+function isPrefix(pathname: string, prefix: string) {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
 
-function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/api/")) {
     const origin = request.headers.get("origin");
     const cors = corsHeadersFor(origin);
+    const token = request.nextUrl.searchParams.get("mstore_token");
+    const requestHeaders = new Headers(request.headers);
+    if (token) requestHeaders.set("x-mystore-token", token);
 
-    // preflight — همان‌جا جواب می‌دهیم، به route نمی‌رسد
     if (request.method === "OPTIONS") {
       return new NextResponse(null, { status: 204, headers: cors ?? {} });
     }
-
-    const response = NextResponse.next();
+    const response = NextResponse.next({ request: { headers: requestHeaders } });
     if (cors) {
       for (const [key, value] of Object.entries(cors)) response.headers.set(key, value);
     }
     return response;
   }
 
-  return authProxy(request);
-}
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const needsAuth = PROTECTED.some((prefix) => isPrefix(pathname, prefix));
+  if (!url || !anon) {
+    if (needsAuth) {
+      const login = request.nextUrl.clone();
+      login.pathname = "/login";
+      return NextResponse.redirect(login);
+    }
+    return NextResponse.next();
+  }
 
-// Next.js 16.2.11+ statically validates that proxy.ts exports a function
-// (default export or a named `proxy` export).
-export { proxy };
+  let response = NextResponse.next({ request });
+  const supabase = createServerClient(url, anon, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        for (const { name, value } of cookiesToSet) request.cookies.set(name, value);
+        response = NextResponse.next({ request });
+        for (const { name, value, options } of cookiesToSet) {
+          response.cookies.set(name, value, options);
+        }
+      },
+    },
+  });
+
+  const { data } = await supabase.auth.getUser();
+  const user = data.user;
+  const role = (user?.app_metadata?.role as string | undefined) ?? "";
+
+  if (needsAuth && !user) {
+    const login = request.nextUrl.clone();
+    login.pathname = "/login";
+    login.searchParams.set("callbackUrl", pathname);
+    const redirect = NextResponse.redirect(login);
+    response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+    return redirect;
+  }
+
+  if (user && role === "CASHIER" && ADMIN_ONLY.some((prefix) => isPrefix(pathname, prefix))) {
+    const dash = request.nextUrl.clone();
+    dash.pathname = "/dashboard";
+    const redirect = NextResponse.redirect(dash);
+    response.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+    return redirect;
+  }
+
+  return response;
+}
 
 export const config = {
   matcher: [
     "/api/:path*",
+    "/dashboard",
     "/dashboard/:path*",
+    "/products",
     "/products/:path*",
+    "/scan",
     "/scan/:path*",
+    "/accounting",
     "/accounting/:path*",
+    "/customers",
     "/customers/:path*",
+    "/barcodes",
+    "/barcodes/:path*",
+    "/settings",
+    "/settings/:path*",
+    "/staff",
+    "/staff/:path*",
+    "/purchases",
+    "/purchases/:path*",
+    "/inventory",
+    "/inventory/:path*",
   ],
 };

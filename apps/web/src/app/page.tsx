@@ -42,8 +42,8 @@ const features = [
   },
   {
     href: "/scan",
-    title: "اسکنر موبایل",
-    desc: "اسکن بارکد با دوربین گوشی و ثبت لحظه‌ای روی همه دستگاه‌ها",
+    title: "اسکنر بارکد",
+    desc: "اپ جدا برای دوربین گوشی؛ اسکن‌ها همان لحظه در پنل دیده می‌شوند",
     icon: ScanLine,
   },
 ];
@@ -72,14 +72,14 @@ export default function HomePage() {
       <section className="space-y-6 text-center">
         <Badge variant="secondary" className="mx-auto flex w-fit gap-1">
           <Sparkles className="size-3" />
-          ساخته‌شده با Next.js و shadcn/ui
+          وب و اسکنر — داده و ورود روی سوپابیس
         </Badge>
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
           فروشگاهت را ساده‌تر اداره کن
         </h1>
         <p className="text-muted-foreground mx-auto max-w-2xl text-lg">
-          انبار، فاکتور، هزینه و اسکن بارکد با موبایل — همه در یک پنل فارسی و
-          راست‌به‌چپ، با گزارش‌های لحظه‌ای.
+          انبار، فاکتور، حسابداری و اسکن بارکد. مدیر همه‌چیز را عوض می‌کند؛
+          صندوق‌دار فقط فروش می‌زند.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <Button size="lg" asChild>

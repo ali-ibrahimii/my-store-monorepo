@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { collections, idOf } from "@/lib/db";
+
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
-import { mapCategories } from "@/lib/repositories";
-import { productDTO } from "@/lib/serialize";
+import { findProductByBarcode } from "@/lib/repositories";
+import { redactProduct } from "@/lib/serialize";
 import { normalizeForLookup } from "@my-store/shared-utils";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/products/lookup?barcode=... — اسکنر از این endpoint استفاده می‌کند */
 export async function GET(request: Request) {
   try {
     const { user, response } = await requireStoreUser();
@@ -19,17 +18,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ found: false, error: "بارکد نامعتبر است" }, { status: 400 });
     }
 
-    const { products } = await collections();
-    const product = await products.findOne({ storeId: user.storeId, barcode });
-    if (!product) {
-      return NextResponse.json({ found: false, barcode });
-    }
-
-    const cats = await mapCategories(user.storeId, [product.categoryId]);
-    return NextResponse.json({
-      found: true,
-      product: productDTO(product, cats.get(idOf(product.categoryId))),
-    });
+    const product = await findProductByBarcode(user.storeId, barcode);
+    if (!product) return NextResponse.json({ found: false, barcode });
+    return NextResponse.json({ found: true, product: redactProduct(product, user.role) });
   } catch (error) {
     return handleRouteError(error);
   }

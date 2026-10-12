@@ -12,7 +12,7 @@ import type {
   SummaryReport,
 } from "@my-store/shared-types";
 import { API_ROUTES } from "@my-store/shared-utils";
-import { apiGet, apiPost } from "./client";
+import { apiGet, apiPost, apiRequest } from "./client";
 
 export function listExpenses(query?: {
   from?: string;
@@ -46,4 +46,26 @@ export function getProfitLoss(query: { from: string; to: string }): Promise<Prof
 
 export function getSalesReport(query: { from: string; to: string }): Promise<SalesReport> {
   return apiGet(API_ROUTES.reportsSales, { from: query.from, to: query.to });
+}
+
+export function updateStoreSettings(input: import("@my-store/shared-types").UpdateStoreInput) {
+  return apiRequest<import("@my-store/shared-types").Store>(API_ROUTES.settings, {
+    method: "PATCH",
+    body: input,
+  });
+}
+
+export function createStaff(input: import("@my-store/shared-types").CreateStaffInput) {
+  return apiPost(API_ROUTES.staff, input);
+}
+
+export function setStaffActive(id: string, active: boolean) {
+  return apiRequest<{ ok: true }>(`${API_ROUTES.staff}/${id}`, {
+    method: "PATCH",
+    body: { active },
+  });
+}
+
+export function createPurchase(input: import("@my-store/shared-types").CreatePurchaseInput) {
+  return apiPost<import("@my-store/shared-types").Purchase>(API_ROUTES.purchases, input);
 }

@@ -12,7 +12,6 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import type { Role } from "@my-store/shared-types";
 
 import { handleRouteError, jsonError, requireStoreUser } from "@/lib/api-helpers";
 import {
@@ -20,7 +19,6 @@ import {
   generateBarcodeBatch,
   productsWithoutBarcode,
 } from "@/lib/barcode-service";
-import { idOf } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -59,10 +57,7 @@ export async function POST(request: Request) {
     }
     const body = parsed.data;
 
-    // تولید پیش‌نمایش کد: هر کاربر فروشگاه می‌تواند؛ ولی ثبت روی محصول
-    // موجودی انبار را تغییر می‌دهد، پس نقش حسابدار به بالا لازم است.
-    const minRole: Role = body.action === "generate" ? "CASHIER" : "ACCOUNTANT";
-    const { user, response } = await requireStoreUser(minRole);
+    const { user, response } = await requireStoreUser("ADMIN");
     if (!user || response) return response ?? jsonError(401, "لطفاً وارد حساب کاربری شوید");
 
     if (body.action === "generate") {
@@ -79,7 +74,7 @@ export async function POST(request: Request) {
       }
       const results = await assignBarcodes(
         user.storeId,
-        pending.map((doc) => ({ productId: idOf(doc._id) })),
+        pending.map((doc) => ({ productId: doc.id })),
       );
       return NextResponse.json(splitResults(results));
     }

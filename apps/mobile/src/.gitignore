@@ -1,8 +1,0 @@
-node_modules/
-.expo/
-dist/
-web-build/
-expo-env.d.ts
-*.tsbuildinfo
-.env
-.env.local

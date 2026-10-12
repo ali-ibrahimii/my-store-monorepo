@@ -1,43 +1,37 @@
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
-import { collections, idOf, idOrEmpty, oid, runInTransaction } from "@/lib/db";
+
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
 import { listExpenses } from "@/lib/repositories";
-import { expenseDTO } from "@/lib/serialize";
+import { expenseDTO, type ExpenseRow } from "@/lib/serialize";
+import { assertData, dbErrorMessage, getAdmin } from "@/lib/supabase";
 import { expenseSchema } from "@my-store/shared-utils";
-import { postExpenseLedger } from "@/lib/ledger";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/expenses?from=&to=&page=&pageSize= (تاریخ‌ها YYYY-MM-DD) */
 export async function GET(request: Request) {
   try {
-    const { user, response } = await requireStoreUser();
+    const { user, response } = await requireStoreUser("ADMIN");
     if (!user) return response;
-
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
-
     const page = await listExpenses(user.storeId, {
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to + "T23:59:59.999Z") : undefined,
+      search: searchParams.get("search")?.trim() || undefined,
       page: Number(searchParams.get("page")) || 1,
-      pageSize: Number(searchParams.get("pageSize")) || 20,
+      pageSize: Number(searchParams.get("pageSize")) || 50,
     });
-
     return NextResponse.json(page);
   } catch (error) {
     return handleRouteError(error);
   }
 }
 
-/** POST /api/expenses — ثبت هزینه + سند دفتر کل */
 export async function POST(request: Request) {
   try {
-    const { user, response } = await requireStoreUser();
+    const { user, response } = await requireStoreUser("ADMIN");
     if (!user) return response;
-
     const body = await request.json();
     const parsed = expenseSchema.safeParse(body);
     if (!parsed.success) {
@@ -47,38 +41,27 @@ export async function POST(request: Request) {
       );
     }
     const data = parsed.data;
-
-    const expense = await runInTransaction(async (session) => {
-      const { expenses, expenseCategories } = await collections();
-
-      const _id = new ObjectId();
-      const now = new Date();
-      await expenses.insertOne(
-        {
-          _id,
-          storeId: user.storeId,
-          title: data.title,
-          amount: Number(data.amount),
-          date: data.date ? new Date(data.date) : now,
-          note: data.note || null,
-          receiptUrl: null,
-          categoryId: idOrEmpty(data.categoryId) || null,
-          createdById: user.id,
-          createdAt: now,
-        },
-        { session },
-      );
-
-      await postExpenseLedger(user.storeId, idOf(_id), Number(data.amount), data.title, session);
-
-      const doc = await expenses.findOne({ _id }, { session });
-      const category = doc?.categoryId
-        ? await expenseCategories.findOne({ _id: oid(doc.categoryId) }, { session })
-        : null;
-      return expenseDTO(doc!, category);
+    const created = await getAdmin().rpc("create_expense", {
+      payload: {
+        store_id: user.storeId,
+        created_by: user.id,
+        title: data.title,
+        amount: data.amount,
+        date: data.date || new Date().toISOString(),
+        note: data.note || null,
+        category_id: data.categoryId || null,
+      },
     });
-
-    return NextResponse.json(expense, { status: 201 });
+    if (created.error) throw new Error(dbErrorMessage(created.error));
+    const id = (created.data as { id: string }).id;
+    const row = assertData(
+      await getAdmin()
+        .from("expenses")
+        .select("*, expense_categories(id, name, store_id)")
+        .eq("id", id)
+        .single(),
+    ) as ExpenseRow;
+    return NextResponse.json(expenseDTO(row), { status: 201 });
   } catch (error) {
     return handleRouteError(error);
   }

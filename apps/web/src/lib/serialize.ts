@@ -1,12 +1,3 @@
-// ============================================================
-// DTO mapping: MongoDB document → شکل JSON که کلاینت‌ها می‌شناسند
-//
-// چرا لازم است؟
-//   - در MongoDB کلید اصلی `_id` از نوع ObjectId است، ولی در JSON باید
-//     رشته باشد. این لایه ObjectId → string و Date → ISO string می‌کند.
-//   - کلاینت (وب و موبایل) نباید هیچ‌وقت شکل داخلی دیتابیس را ببیند.
-// ============================================================
-
 import type {
   Category,
   Customer,
@@ -17,186 +8,390 @@ import type {
   Page,
   Payment,
   Product,
+  Purchase,
+  PurchaseItem,
   ScanEvent,
+  Store,
   Transaction,
 } from "@my-store/shared-types";
-import { idOf } from "./db";
-import type {
-  CategoryDoc,
-  CustomerDoc,
-  ExpenseCategoryDoc,
-  ExpenseDoc,
-  InvoiceDoc,
-  ProductDoc,
-  ScanEventDoc,
-  TransactionDoc,
-  UserDoc,
-} from "./models";
 
-const iso = (value: Date | string | null | undefined): string =>
-  value instanceof Date ? value.toISOString() : (value ?? new Date(0).toISOString());
+const num = (value: number | string | null | undefined) => Number(value ?? 0);
+const iso = (value: string | null | undefined) => value ?? new Date(0).toISOString();
 
-export function categoryDTO(c: CategoryDoc): Category {
+export function one<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+export function pageDTO<T>(items: T[], total: number, page: number, pageSize: number): Page<T> {
+  return { items, total, page, pageSize };
+}
+
+export interface CategoryRow {
+  id: string;
+  name: string;
+  slug: string;
+  store_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductRow {
+  id: string;
+  name: string;
+  sku: string | null;
+  barcode: string;
+  description: string | null;
+  cost_price: number | string;
+  sale_price: number | string;
+  stock: number;
+  low_stock_threshold: number;
+  category_id: string | null;
+  store_id: string;
+  created_at: string;
+  updated_at: string;
+  categories?: CategoryRow | CategoryRow[] | null;
+}
+
+export interface CustomerRow {
+  id: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  note: string | null;
+  balance: number | string;
+  store_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StoreRow {
+  id: string;
+  name: string;
+  slug: string;
+  currency: string;
+  phone: string | null;
+  address: string | null;
+  email: string | null;
+  tax_rate: number | string;
+  invoice_prefix: string;
+  receipt_footer: string | null;
+  low_stock_default: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export function storeDTO(row: StoreRow): Store {
   return {
-    id: idOf(c._id),
-    name: c.name,
-    slug: c.slug,
-    storeId: idOf(c.storeId),
-    createdAt: iso(c.createdAt),
-    updatedAt: iso(c.updatedAt),
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    currency: row.currency,
+    phone: row.phone,
+    address: row.address,
+    email: row.email,
+    taxRate: num(row.tax_rate),
+    invoicePrefix: row.invoice_prefix,
+    receiptFooter: row.receipt_footer,
+    lowStockDefault: Number(row.low_stock_default ?? 5),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
   };
 }
 
-export function productDTO(p: ProductDoc, category?: CategoryDoc | null): Product {
+export function categoryDTO(row: CategoryRow): Category {
   return {
-    id: idOf(p._id),
-    name: p.name,
-    sku: p.sku ?? null,
-    barcode: p.barcode,
-    description: p.description ?? null,
-    costPrice: Number(p.costPrice ?? 0),
-    salePrice: Number(p.salePrice ?? 0),
-    stock: Number(p.stock ?? 0),
-    lowStockThreshold: Number(p.lowStockThreshold ?? 0),
-    categoryId: idOf(p.categoryId) || null,
-    category: category ? categoryDTO(category) : null,
-    storeId: idOf(p.storeId),
-    createdAt: iso(p.createdAt),
-    updatedAt: iso(p.updatedAt),
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    storeId: row.store_id,
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
   };
 }
 
-export function customerDTO(c: CustomerDoc): Customer {
+export function productDTO(row: ProductRow, category?: CategoryRow | null): Product {
+  const nested = category ?? one(row.categories);
   return {
-    id: idOf(c._id),
-    name: c.name,
-    phone: c.phone ?? null,
-    address: c.address ?? null,
-    balance: Number(c.balance ?? 0),
-    storeId: idOf(c.storeId),
-    createdAt: iso(c.createdAt),
-    updatedAt: iso(c.updatedAt),
+    id: row.id,
+    name: row.name,
+    sku: row.sku,
+    barcode: row.barcode ?? "",
+    description: row.description,
+    costPrice: num(row.cost_price),
+    salePrice: num(row.sale_price),
+    stock: Number(row.stock ?? 0),
+    lowStockThreshold: Number(row.low_stock_threshold ?? 0),
+    categoryId: row.category_id,
+    category: nested ? categoryDTO(nested) : null,
+    storeId: row.store_id,
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
   };
 }
 
-export function expenseCategoryDTO(c: ExpenseCategoryDoc): ExpenseCategory {
-  return { id: idOf(c._id), name: c.name, storeId: idOf(c.storeId) };
-}
-
-export function expenseDTO(e: ExpenseDoc, category?: ExpenseCategoryDoc | null): Expense {
+export function customerDTO(row: CustomerRow): Customer {
   return {
-    id: idOf(e._id),
-    title: e.title,
-    amount: Number(e.amount ?? 0),
-    date: iso(e.date),
-    note: e.note ?? null,
-    receiptUrl: e.receiptUrl ?? null,
-    categoryId: idOf(e.categoryId) || null,
-    category: category ? expenseCategoryDTO(category) : null,
-    storeId: idOf(e.storeId),
-    createdById: idOf(e.createdById),
-    createdAt: iso(e.createdAt),
+    id: row.id,
+    name: row.name,
+    phone: row.phone,
+    address: row.address,
+    note: row.note ?? null,
+    balance: num(row.balance),
+    storeId: row.store_id,
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
   };
 }
 
-export function transactionDTO(t: TransactionDoc): Transaction {
+export interface ExpenseCategoryRow {
+  id: string;
+  name: string;
+  store_id: string;
+}
+
+export function expenseCategoryDTO(row: ExpenseCategoryRow): ExpenseCategory {
+  return { id: row.id, name: row.name, storeId: row.store_id };
+}
+
+export interface ExpenseRow {
+  id: string;
+  title: string;
+  amount: number | string;
+  date: string;
+  note: string | null;
+  receipt_url: string | null;
+  category_id: string | null;
+  store_id: string;
+  created_by: string | null;
+  created_at: string;
+  expense_categories?: ExpenseCategoryRow | ExpenseCategoryRow[] | null;
+}
+
+export function expenseDTO(row: ExpenseRow, category?: ExpenseCategoryRow | null): Expense {
+  const nested = category ?? one(row.expense_categories);
   return {
-    id: idOf(t._id),
-    date: iso(t.date),
-    account: t.account,
-    type: t.type,
-    amount: Number(t.amount ?? 0),
-    refType: t.refType ?? null,
-    refId: t.refId ?? null,
-    note: t.note ?? null,
-    storeId: idOf(t.storeId),
-    createdAt: iso(t.createdAt),
+    id: row.id,
+    title: row.title,
+    amount: num(row.amount),
+    date: iso(row.date),
+    note: row.note,
+    receiptUrl: row.receipt_url,
+    categoryId: row.category_id,
+    category: nested ? expenseCategoryDTO(nested) : null,
+    storeId: row.store_id,
+    createdById: row.created_by ?? "",
+    createdAt: iso(row.created_at),
   };
 }
 
-interface InvoiceRelations {
-  customer?: CustomerDoc | null;
-  /** نقشه‌ی productId(hex) → محصول */
-  products?: Map<string, ProductDoc>;
+export interface LedgerRow {
+  id: string;
+  date: string;
+  account: Transaction["account"];
+  type: Transaction["type"];
+  amount: number | string;
+  ref_type: string | null;
+  ref_id: string | null;
+  note: string | null;
+  store_id: string;
+  created_at: string;
 }
 
-export function invoiceDTO(i: InvoiceDoc, relations: InvoiceRelations = {}): Invoice {
-  const invoiceId = idOf(i._id);
-  const items: InvoiceItem[] = (i.items ?? []).map((item) => {
-    const product = relations.products?.get(idOf(item.productId));
+export function transactionDTO(row: LedgerRow): Transaction {
+  return {
+    id: row.id,
+    date: iso(row.date),
+    account: row.account,
+    type: row.type,
+    amount: num(row.amount),
+    refType: row.ref_type,
+    refId: row.ref_id,
+    note: row.note,
+    storeId: row.store_id,
+    createdAt: iso(row.created_at),
+  };
+}
+
+export interface InvoiceItemRow {
+  id: string;
+  invoice_id: string;
+  product_id: string;
+  qty: number;
+  unit_price: number | string;
+  total: number | string;
+  products?: ProductRow | ProductRow[] | null;
+}
+
+export interface PaymentRow {
+  id: string;
+  invoice_id: string;
+  method: Payment["method"];
+  amount: number | string;
+  note: string | null;
+  created_at: string;
+}
+
+export interface InvoiceRow {
+  id: string;
+  number: string;
+  status: Invoice["status"];
+  customer_id: string | null;
+  subtotal: number | string;
+  discount: number | string;
+  tax: number | string;
+  total: number | string;
+  paid_amount: number | string;
+  note: string | null;
+  store_id: string;
+  created_by: string | null;
+  issued_at: string | null;
+  created_at: string;
+  updated_at: string;
+  customers?: CustomerRow | CustomerRow[] | null;
+  invoice_items?: InvoiceItemRow[] | null;
+  payments?: PaymentRow[] | null;
+}
+
+export function invoiceDTO(row: InvoiceRow): Invoice {
+  const customer = one(row.customers);
+  const items: InvoiceItem[] = (row.invoice_items ?? []).map((item) => {
+    const product = one(item.products);
     return {
-      id: idOf(item._id) || `${invoiceId}-item`,
-      invoiceId,
-      productId: idOf(item.productId),
+      id: item.id,
+      invoiceId: item.invoice_id,
+      productId: item.product_id,
       product: product ? productDTO(product) : undefined,
-      qty: Number(item.qty ?? 0),
-      unitPrice: Number(item.unitPrice ?? 0),
-      total: Number(item.total ?? 0),
+      qty: Number(item.qty),
+      unitPrice: num(item.unit_price),
+      total: num(item.total),
     };
   });
-
-  const payments: Payment[] = (i.payments ?? []).map((p) => ({
-    id: idOf(p._id),
-    invoiceId,
-    method: p.method,
-    amount: Number(p.amount ?? 0),
-    note: p.note ?? null,
-    createdAt: iso(p.createdAt),
+  const payments: Payment[] = (row.payments ?? []).map((payment) => ({
+    id: payment.id,
+    invoiceId: payment.invoice_id,
+    method: payment.method,
+    amount: num(payment.amount),
+    note: payment.note,
+    createdAt: iso(payment.created_at),
   }));
-
   return {
-    id: invoiceId,
-    number: i.number,
-    status: i.status,
-    customerId: idOf(i.customerId) || null,
-    customer: relations.customer ? customerDTO(relations.customer) : null,
+    id: row.id,
+    number: row.number,
+    status: row.status,
+    customerId: row.customer_id,
+    customer: customer ? customerDTO(customer) : null,
     items,
     payments,
-    subtotal: Number(i.subtotal ?? 0),
-    discount: Number(i.discount ?? 0),
-    tax: Number(i.tax ?? 0),
-    total: Number(i.total ?? 0),
-    paidAmount: Number(i.paidAmount ?? 0),
-    note: i.note ?? null,
-    storeId: idOf(i.storeId),
-    createdById: idOf(i.createdById),
-    issuedAt: i.issuedAt ? iso(i.issuedAt) : null,
-    createdAt: iso(i.createdAt),
-    updatedAt: iso(i.updatedAt),
+    subtotal: num(row.subtotal),
+    discount: num(row.discount),
+    tax: num(row.tax),
+    total: num(row.total),
+    paidAmount: num(row.paid_amount),
+    note: row.note,
+    storeId: row.store_id,
+    createdById: row.created_by ?? "",
+    issuedAt: row.issued_at,
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
   };
 }
 
-interface ScanRelations {
-  product?: ProductDoc | null;
-  user?: UserDoc | null;
+export interface PurchaseItemRow {
+  id: string;
+  purchase_id: string;
+  product_id: string;
+  qty: number;
+  unit_cost: number | string;
+  total: number | string;
+  products?: ProductRow | ProductRow[] | null;
 }
 
-export function scanEventDTO(e: ScanEventDoc, relations: ScanRelations = {}): ScanEvent {
-  const product = relations.product;
+export interface PurchaseRow {
+  id: string;
+  number: string;
+  supplier: string | null;
+  total: number | string;
+  paid_amount: number | string;
+  note: string | null;
+  store_id: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  purchase_items?: PurchaseItemRow[] | null;
+}
+
+export function purchaseDTO(row: PurchaseRow): Purchase {
+  const items: PurchaseItem[] = (row.purchase_items ?? []).map((item) => {
+    const product = one(item.products);
+    return {
+      id: item.id,
+      purchaseId: item.purchase_id,
+      productId: item.product_id,
+      product: product ? productDTO(product) : undefined,
+      qty: Number(item.qty),
+      unitCost: num(item.unit_cost),
+      total: num(item.total),
+    };
+  });
   return {
-    id: idOf(e._id),
-    productId: idOf(e.productId) || null,
-    barcode: e.barcode,
-    type: e.type,
-    qty: Number(e.qty ?? 1),
-    device: e.device ?? null,
-    note: e.note ?? null,
-    userId: idOf(e.userId) || null,
-    userName: relations.user?.name ?? relations.user?.email ?? null,
-    storeId: idOf(e.storeId),
-    createdAt: iso(e.createdAt),
+    id: row.id,
+    number: row.number,
+    supplier: row.supplier,
+    total: num(row.total),
+    paidAmount: num(row.paid_amount),
+    note: row.note,
+    storeId: row.store_id,
+    createdById: row.created_by ?? "",
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+    items,
+  };
+}
+
+export interface ScanRow {
+  id: string;
+  product_id: string | null;
+  barcode: string;
+  type: ScanEvent["type"];
+  qty: number;
+  device: string | null;
+  note: string | null;
+  user_id: string | null;
+  store_id: string;
+  created_at: string;
+  products?: ProductRow | ProductRow[] | null;
+  profiles?: { name: string | null; email: string } | { name: string | null; email: string }[] | null;
+}
+
+export function scanEventDTO(row: ScanRow): ScanEvent {
+  const product = one(row.products);
+  const user = one(row.profiles);
+  return {
+    id: row.id,
+    productId: row.product_id,
+    barcode: row.barcode,
+    type: row.type,
+    qty: Number(row.qty),
+    device: row.device,
+    note: row.note,
+    userId: row.user_id,
+    userName: user?.name ?? user?.email ?? null,
+    storeId: row.store_id,
+    createdAt: iso(row.created_at),
     product: product
       ? {
-          id: idOf(product._id),
+          id: product.id,
           name: product.name,
           barcode: product.barcode,
-          salePrice: Number(product.salePrice ?? 0),
-          stock: Number(product.stock ?? 0),
+          salePrice: num(product.sale_price),
+          stock: Number(product.stock),
         }
       : null,
   };
 }
 
-export function pageDTO<T>(items: T[], total: number, page: number, pageSize: number): Page<T> {
-  return { items, total, page, pageSize };
+export function redactProduct(product: Product, role: string): Product {
+  if (role === "ADMIN") return product;
+  return { ...product, costPrice: 0 };
 }

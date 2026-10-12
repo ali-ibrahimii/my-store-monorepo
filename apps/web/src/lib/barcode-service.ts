@@ -1,16 +1,3 @@
-// ============================================================
-// سرویس بارکد — تولید EAN-13 یکتا برای محصولات یک فروشگاه
-//
-// چرا این‌جا و نه داخل route؟
-//   هم `POST /api/products` (تولید خودکار هنگام ثبت محصول جدید) و هم
-//   `POST /api/products/barcodes` (تب «بارکدها») به همین منطق نیاز دارند:
-//   «یک کد بساز که در این فروشگاه قبلاً ثبت نشده باشد».
-//
-// نکته‌ی MongoDB: روی `{ storeId, barcode }` ایندکس unique داریم؛ پس اگر
-// دو درخواست هم‌زمان یک کد را بسازند، دومی با خطای duplicate رد می‌شود و
-// ما دوباره تلاش می‌کنیم (retry) — نه اینکه کد تکراری ثبت شود.
-// ============================================================
-
 import {
   GS1_IRAN_PREFIX,
   generateEan13,
@@ -20,26 +7,19 @@ import {
   storeCodeFromId,
 } from "@my-store/shared-utils";
 
-import { collections, idOf, oid } from "./db";
-import type { ProductDoc } from "./models";
+import { assertData, getAdmin } from "./supabase";
 
 export interface GenerateBarcodeOptions {
-  /** پیشوند GS1 — پیش‌فرض ۶۲۸ (ایران) */
   prefix?: string;
-  /** چند بار تلاش کنیم تا کد غیرتکراری پیدا شود */
   attempts?: number;
 }
 
-/** مجموعه‌ی بارکدهای ثبت‌شده‌ی فروشگاه (برای غیرتکراری بودن سریع) */
 export async function usedBarcodes(storeId: string): Promise<Set<string>> {
-  const { products } = await collections();
-  const docs = await products.find({ storeId }, { projection: { barcode: 1 } }).toArray();
-  return new Set(
-    docs.map((doc) => normalizeBarcode(doc.barcode)).filter((code) => code.length > 0),
-  );
+  const result = await getAdmin().from("products").select("barcode").eq("store_id", storeId);
+  const rows = assertData(result) as { barcode: string | null }[];
+  return new Set(rows.map((row) => normalizeBarcode(row.barcode ?? "")).filter((code) => code.length > 0));
 }
 
-/** یک بارکد EAN-13 تازه که در این فروشگاه تکراری نباشد. */
 export async function generateUniqueBarcode(
   storeId: string,
   options: GenerateBarcodeOptions = {},
@@ -54,16 +34,14 @@ export async function generateUniqueBarcode(
     if (!used.has(code)) return code;
   }
 
-  // تصادم پشت‌سرهم (تعداد محصولات خیلی زیاد): از سریال ترتیبی استفاده کن
   for (let serial = 0; serial < 1_000_000; serial++) {
     const code = generateEan13({ prefix, storeCode, serial });
     if (!used.has(code)) return code;
   }
 
-  throw new Error("ساخت بارکد یکتا ممکن نشد — تعداد محصولات از ظرفیت بارکدگذاری بیشتر است");
+  throw new Error("ساخت بارکد یکتا ممکن نشد");
 }
 
-/** چند بارکد تازه (هنوز ثبت نشده) که در این فروشگاه تکراری نباشند. */
 export async function generateBarcodeBatch(
   storeId: string,
   count: number,
@@ -71,7 +49,6 @@ export async function generateBarcodeBatch(
 ): Promise<string[]> {
   const total = Math.max(0, Math.min(500, Math.trunc(count) || 0));
   if (total === 0) return [];
-
   const used = await usedBarcodes(storeId);
   const storeCode = storeCodeFromId(storeId);
   const prefix = options.prefix || GS1_IRAN_PREFIX;
@@ -81,64 +58,65 @@ export async function generateBarcodeBatch(
     const code = generateEan13({ prefix, storeCode });
     if (!used.has(code)) codes.add(code);
   }
-
-  // تکمیل با سریال ترتیبی اگر تصادفی جا نماند
   for (let serial = 0; codes.size < total && serial < 1_000_000; serial++) {
     const code = generateEan13({ prefix, storeCode, serial });
     if (!used.has(code)) codes.add(code);
   }
-
   return [...codes];
 }
 
-/** محصولاتی که هنوز بارکد ندارند (اختیاری: محدود به چند شناسه) */
-export async function productsWithoutBarcode(
-  storeId: string,
-  productIds?: string[],
-): Promise<ProductDoc[]> {
-  const { products } = await collections();
-  const docs = await products.find({ storeId }).sort({ name: 1 }).toArray();
+export async function productsWithoutBarcode(storeId: string, productIds?: string[]) {
+  const result = await getAdmin()
+    .from("products")
+    .select("id, name, barcode")
+    .eq("store_id", storeId)
+    .order("name");
+  const rows = assertData(result) as { id: string; name: string; barcode: string | null }[];
   const only = productIds && productIds.length > 0 ? new Set(productIds) : null;
-  return docs.filter((doc) => isBlankBarcode(doc.barcode) && (!only || only.has(idOf(doc._id))));
+  return rows.filter((row) => isBlankBarcode(row.barcode) && (!only || only.has(row.id)));
 }
 
-/**
- * ثبت یک بارکد روی محصول.
- * اگر `barcode` خالی باشد، خودش یک EAN-13 تازه می‌سازد.
- */
 export async function assignBarcodeToProduct(
   storeId: string,
   productId: string,
   barcode?: string,
 ): Promise<{ ok: true; barcode: string } | { ok: false; error: string }> {
-  const { products } = await collections();
   const wanted = normalizeBarcode(barcode ?? "");
-
   if (wanted && !isValidEan13(wanted) && !/^[\x20-\x7E]{4,48}$/.test(wanted)) {
     return { ok: false, error: "بارکد نامعتبر است" };
   }
 
-  const product = await products.findOne({ _id: oid(productId), storeId });
-  if (!product) return { ok: false, error: "محصول یافت نشد" };
+  const existing = await getAdmin()
+    .from("products")
+    .select("id")
+    .eq("store_id", storeId)
+    .eq("id", productId)
+    .maybeSingle();
+  if (existing.error) return { ok: false, error: existing.error.message };
+  if (!existing.data) return { ok: false, error: "محصول یافت نشد" };
 
   const code = wanted || (await generateUniqueBarcode(storeId));
-
   if (wanted) {
-    const clash = await products.findOne({ storeId, barcode: code });
-    if (clash && idOf(clash._id) !== productId) {
+    const clash = await getAdmin()
+      .from("products")
+      .select("id")
+      .eq("store_id", storeId)
+      .eq("barcode", code)
+      .maybeSingle();
+    if (clash.data && clash.data.id !== productId) {
       return { ok: false, error: "این بارکد روی محصول دیگری ثبت شده است" };
     }
   }
 
-  await products.updateOne(
-    { _id: oid(productId), storeId },
-    { $set: { barcode: code, updatedAt: new Date() } },
-  );
-
+  const updated = await getAdmin()
+    .from("products")
+    .update({ barcode: code, updated_at: new Date().toISOString() })
+    .eq("id", productId)
+    .eq("store_id", storeId);
+  if (updated.error) return { ok: false, error: updated.error.message };
   return { ok: true, barcode: code };
 }
 
-/** چند بارکد برای چند محصول (همه با هم) — خروجی: نقشه‌ی productId → barcode */
 export async function assignBarcodes(
   storeId: string,
   assignments: { productId: string; barcode?: string }[],

@@ -37,6 +37,10 @@ import type { Customer, Product } from "@my-store/shared-types";
 interface InvoiceFormProps {
   products: Pick<Product, "id" | "name" | "salePrice" | "stock">[];
   customers: Pick<Customer, "id" | "name">[];
+  /** صندوق‌دار قیمت و تخفیف را عوض نمی‌کند */
+  lockPrices?: boolean;
+  taxRate?: number;
+  onCreated?: () => void;
 }
 
 interface ItemRow {
@@ -47,7 +51,13 @@ interface ItemRow {
 
 const EMPTY_ROW: ItemRow = { productId: "", qty: 1, unitPrice: 0 };
 
-export function InvoiceForm({ products, customers }: InvoiceFormProps) {
+export function InvoiceForm({
+  products,
+  customers,
+  lockPrices = false,
+  taxRate = 0,
+  onCreated,
+}: InvoiceFormProps) {
   const router = useRouter();
   const [items, setItems] = React.useState<ItemRow[]>([{ ...EMPTY_ROW }]);
   const [customerId, setCustomerId] = React.useState("");
@@ -65,7 +75,9 @@ export function InvoiceForm({ products, customers }: InvoiceFormProps) {
     () => items.reduce((sum, item) => sum + (item.qty * item.unitPrice || 0), 0),
     [items],
   );
-  const total = Math.max(0, subtotal - discount + tax);
+  const effectiveDiscount = lockPrices ? 0 : discount;
+  const effectiveTax = lockPrices ? Math.round((subtotal * taxRate) / 100) : tax;
+  const total = Math.max(0, subtotal - effectiveDiscount + effectiveTax);
 
   function updateItem(index: number, patch: Partial<ItemRow>) {
     setItems((prev) =>
@@ -101,8 +113,8 @@ export function InvoiceForm({ products, customers }: InvoiceFormProps) {
       await createInvoice({
         customerId: customerId || undefined,
         items: validItems,
-        discount,
-        tax,
+        discount: effectiveDiscount,
+        tax: effectiveTax,
         note: note || undefined,
         issueNow: true,
         ...(paymentAmount > 0
@@ -116,6 +128,7 @@ export function InvoiceForm({ products, customers }: InvoiceFormProps) {
       setNote("");
       setPaymentAmount(0);
       toast.success("فاکتور ثبت شد");
+      onCreated?.();
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "خطا در ثبت فاکتور");
@@ -172,6 +185,7 @@ export function InvoiceForm({ products, customers }: InvoiceFormProps) {
                 min={0}
                 dir="ltr"
                 value={item.unitPrice}
+                readOnly={lockPrices}
                 onChange={(event) =>
                   updateItem(index, { unitPrice: Number(event.target.value) })
                 }
@@ -224,7 +238,8 @@ export function InvoiceForm({ products, customers }: InvoiceFormProps) {
             type="number"
             min={0}
             dir="ltr"
-            value={discount}
+            value={lockPrices ? 0 : discount}
+            readOnly={lockPrices}
             onChange={(event) => setDiscount(Number(event.target.value))}
           />
         </Field>
@@ -234,7 +249,8 @@ export function InvoiceForm({ products, customers }: InvoiceFormProps) {
             type="number"
             min={0}
             dir="ltr"
-            value={tax}
+            value={lockPrices ? effectiveTax : tax}
+            readOnly={lockPrices}
             onChange={(event) => setTax(Number(event.target.value))}
           />
         </Field>

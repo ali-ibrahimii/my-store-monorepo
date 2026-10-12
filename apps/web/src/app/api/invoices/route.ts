@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
+
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
-import { listInvoices } from "@/lib/repositories";
 import { createInvoice } from "@/lib/invoice-service";
+import { listInvoices } from "@/lib/repositories";
 import { invoiceSchema } from "@my-store/shared-utils";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/invoices?status=&from=&to=&page=&pageSize= */
 export async function GET(request: Request) {
   try {
     const { user, response } = await requireStoreUser();
@@ -15,25 +15,20 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
-
     const page = await listInvoices(user.storeId, {
       status: searchParams.get("status") || undefined,
+      search: searchParams.get("search")?.trim() || undefined,
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to + "T23:59:59.999Z") : undefined,
       page: Number(searchParams.get("page")) || 1,
-      pageSize: Number(searchParams.get("pageSize")) || 20,
+      pageSize: Number(searchParams.get("pageSize")) || 50,
     });
-
     return NextResponse.json(page);
   } catch (error) {
     return handleRouteError(error);
   }
 }
 
-/**
- * POST /api/invoices — ساخت فاکتور فروش
- * (آیتم‌ها + کاهش موجودی + حرکت انبار + دفتر کل + پرداخت اولیه + مانده مشتری)
- */
 export async function POST(request: Request) {
   try {
     const { user, response } = await requireStoreUser();
@@ -48,7 +43,6 @@ export async function POST(request: Request) {
       );
     }
     const data = parsed.data;
-
     const invoice = await createInvoice(
       {
         customerId: data.customerId || null,
@@ -67,7 +61,6 @@ export async function POST(request: Request) {
       },
       user,
     );
-
     return NextResponse.json(invoice, { status: 201 });
   } catch (error) {
     return handleRouteError(error);

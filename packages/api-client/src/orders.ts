@@ -11,7 +11,7 @@ import type {
   Page,
 } from "@my-store/shared-types";
 import { API_ROUTES } from "@my-store/shared-utils";
-import { apiGet, apiPatch, apiPost } from "./client";
+import { apiGet, apiPatch, apiPost, apiRequest } from "./client";
 
 export function listInvoices(query?: {
   status?: string;
@@ -54,4 +54,12 @@ export function listCustomers(query?: { search?: string }): Promise<Page<Custome
 
 export function createCustomer(input: CreateCustomerInput): Promise<Customer> {
   return apiPost(API_ROUTES.customers, input);
+}
+
+export function updateCustomer(id: string, input: Partial<CreateCustomerInput>): Promise<Customer> {
+  return apiPatch(`${API_ROUTES.customers}/${id}`, input);
+}
+
+export function deleteCustomer(id: string): Promise<{ ok: true }> {
+  return apiRequest(`${API_ROUTES.customers}/${id}`, { method: "DELETE" });
 }

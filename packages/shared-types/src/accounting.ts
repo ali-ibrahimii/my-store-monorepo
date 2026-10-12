@@ -32,6 +32,7 @@ export interface PurchaseItem {
 export interface CreatePurchaseInput {
   supplier?: string;
   note?: string;
+  paidAmount?: number;
   items: { productId: string; qty: number; unitCost: number }[];
 }
 

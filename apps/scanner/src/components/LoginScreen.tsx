@@ -57,7 +57,7 @@ interface LoginScreenProps {
 }
 
 export function LoginScreen({ onLoggedIn }: LoginScreenProps) {
-  const [email, setEmail] = useState("owner@mystore.ir");
+  const [email, setEmail] = useState("cashier@mystore.ir");
   const [password, setPassword] = useState("123456");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +86,7 @@ export function LoginScreen({ onLoggedIn }: LoginScreenProps) {
     setBusy(true);
     setError(null);
     try {
-      const session = await apiPost<MobileSession>(API_ROUTES.mobileLogin, {
+      const session = await apiPost<MobileSession>(API_ROUTES.scannerLogin, {
         email: email.trim(),
         password,
       });

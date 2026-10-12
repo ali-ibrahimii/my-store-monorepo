@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
 import { z } from "zod";
-import { collections, idOf } from "@/lib/db";
+
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
 import { listExpenseCategories } from "@/lib/repositories";
+import { assertData, getAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/expense-categories */
 export async function GET() {
   try {
-    const { user, response } = await requireStoreUser();
+    const { user, response } = await requireStoreUser("ADMIN");
     if (!user) return response;
     return NextResponse.json(await listExpenseCategories(user.storeId));
   } catch (error) {
@@ -22,41 +21,35 @@ const createSchema = z.object({
   name: z.string().min(2, "نام دسته را وارد کنید"),
 });
 
-/** POST /api/expense-categories */
 export async function POST(request: Request) {
   try {
-    const { user, response } = await requireStoreUser();
+    const { user, response } = await requireStoreUser("ADMIN");
     if (!user) return response;
-
-    const body = await request.json();
-    const parsed = createSchema.safeParse(body);
+    const parsed = createSchema.safeParse(await request.json());
     if (!parsed.success) {
       return NextResponse.json(
         { error: parsed.error.issues[0]?.message ?? "اطلاعات نامعتبر است" },
         { status: 400 },
       );
     }
-
-    const { expenseCategories } = await collections();
-
-    const exists = await expenseCategories.findOne({
-      storeId: user.storeId,
-      name: parsed.data.name,
-    });
-    if (exists) {
+    const exists = await getAdmin()
+      .from("expense_categories")
+      .select("id")
+      .eq("store_id", user.storeId)
+      .eq("name", parsed.data.name)
+      .maybeSingle();
+    if (exists.data) {
       return NextResponse.json({ error: "این دسته هزینه قبلاً ثبت شده است" }, { status: 409 });
     }
-
-    const _id = new ObjectId();
-    await expenseCategories.insertOne({
-      _id,
-      storeId: user.storeId,
-      name: parsed.data.name,
-    });
-
-    const doc = await expenseCategories.findOne({ _id });
+    const inserted = assertData(
+      await getAdmin()
+        .from("expense_categories")
+        .insert({ store_id: user.storeId, name: parsed.data.name })
+        .select("id, name, store_id")
+        .single(),
+    ) as { id: string; name: string; store_id: string };
     return NextResponse.json(
-      { id: idOf(doc?._id), name: doc?.name, storeId: idOf(doc?.storeId) },
+      { id: inserted.id, name: inserted.name, storeId: inserted.store_id },
       { status: 201 },
     );
   } catch (error) {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { ArrowRight, CreditCard } from "lucide-react";
 
 import { Button } from "@my-store/ui-kit/components/button";
@@ -35,7 +35,7 @@ import {
 
 import { InvoiceActions } from "@/components/invoice-actions";
 import { InvoiceStatusBadge } from "@/components/invoice-status-badge";
-import { auth } from "@/lib/auth";
+import { requirePageUser } from "@/lib/auth";
 import { getInvoice } from "@/lib/repositories";
 
 export const dynamic = "force-dynamic";
@@ -48,11 +48,10 @@ export async function generateMetadata({ params }: PageProps) {
 }
 
 export default async function InvoiceDetailPage({ params }: PageProps) {
-  const session = await auth();
-  if (!session?.user?.storeId) redirect("/login");
+  const user = await requirePageUser();
   const { id } = await params;
 
-  const invoice = await getInvoice(session.user.storeId, id);
+  const invoice = await getInvoice(user.storeId, id);
   if (!invoice) notFound();
 
   const remaining = Math.max(0, invoice.total - invoice.paidAmount);
@@ -232,7 +231,7 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <InvoiceActions invoice={invoice} />
+              <InvoiceActions invoice={invoice} canManage={user.role === "ADMIN"} />
             </CardContent>
           </Card>
         </div>

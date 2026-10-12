@@ -1,37 +1,3 @@
-// ============================================================
-// Repositories — تنها جایی که کوئری‌های MongoDB نوشته می‌شود
-//
-// صفحه‌ها و API routeها به‌جای دست‌و‌پنجه نرم‌کردن با درایور،
-// از این توابع آماده استفاده می‌کنند.
-//
-// الگوی رایج در MongoDB که اینجا استفاده شده: «دو کوئری به‌جای JOIN»
-//   1) فاکتورها را می‌گیریم
-//   2) شناسه‌های یکتای محصول/مشتری را جمع می‌کنیم و با `$in`
-//      همه را یک‌جا می‌گیریم، بعد در حافظه به هم وصل می‌کنیم.
-// ============================================================
-
-import type { Filter } from "mongodb";
-import { collections, idOf, oid } from "./db";
-import type {
-  CategoryDoc,
-  CustomerDoc,
-  ExpenseCategoryDoc,
-  ExpenseDoc,
-  InvoiceDoc,
-  ProductDoc,
-  ScanEventDoc,
-  UserDoc,
-} from "./models";
-import {
-  categoryDTO,
-  customerDTO,
-  expenseCategoryDTO,
-  expenseDTO,
-  invoiceDTO,
-  pageDTO,
-  productDTO,
-  scanEventDTO,
-} from "./serialize";
 import type {
   Category,
   Customer,
@@ -40,51 +6,89 @@ import type {
   Invoice,
   Page,
   Product,
+  Purchase,
   ScanEvent,
+  Store,
+  Transaction,
 } from "@my-store/shared-types";
 
-/** فرار از کاراکترهای خاص regex تا جست‌وجوی کاربر کوئری را نشکند */
-export function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+import { assertData, getAdmin } from "./supabase";
+import {
+  categoryDTO,
+  customerDTO,
+  expenseDTO,
+  invoiceDTO,
+  pageDTO,
+  productDTO,
+  purchaseDTO,
+  scanEventDTO,
+  storeDTO,
+  transactionDTO,
+  type CategoryRow,
+  type CustomerRow,
+  type ExpenseRow,
+  type InvoiceRow,
+  type ProductRow,
+  type PurchaseRow,
+  type ScanRow,
+  type StoreRow,
+} from "./serialize";
+
+export const PRODUCT_SELECT = `
+  id, name, sku, barcode, description, cost_price, sale_price, stock, low_stock_threshold,
+  category_id, store_id, created_at, updated_at,
+  categories (id, name, slug, store_id, created_at, updated_at)
+`;
+
+export const INVOICE_SELECT = `
+  id, number, status, customer_id, subtotal, discount, tax, total, paid_amount, note,
+  store_id, created_by, issued_at, created_at, updated_at,
+  customers (id, name, phone, address, note, balance, store_id, created_at, updated_at),
+  invoice_items (
+    id, invoice_id, product_id, qty, unit_price, total,
+    products (
+      id, name, sku, barcode, description, cost_price, sale_price, stock,
+      low_stock_threshold, category_id, store_id, created_at, updated_at
+    )
+  ),
+  payments (id, invoice_id, method, amount, note, created_at)
+`;
+
+const PURCHASE_SELECT = `
+  id, number, supplier, total, paid_amount, note, store_id, created_by, created_at, updated_at,
+  purchase_items (
+    id, purchase_id, product_id, qty, unit_cost, total,
+    products (
+      id, name, sku, barcode, description, cost_price, sale_price, stock,
+      low_stock_threshold, category_id, store_id, created_at, updated_at
+    )
+  )
+`;
+
+export function escapeIlike(value: string): string {
+  return value.replace(/[%_,]/g, "").trim();
 }
 
-/** جست‌وجوی بدون حساسیت به بزرگی/کوچکی حروف */
-export function containsFilter(field: string, value: string): Record<string, unknown> {
-  return { [field]: { $regex: escapeRegex(value), $options: "i" } };
+export async function getStore(storeId: string): Promise<Store | null> {
+  const result = await getAdmin().from("stores").select("*").eq("id", storeId).maybeSingle();
+  const row = assertData(result) as StoreRow | null;
+  return row ? storeDTO(row) : null;
 }
-
-// ------------------------------------------------------------
-// Categories
-// ------------------------------------------------------------
 
 export async function listCategories(storeId: string): Promise<Category[]> {
-  const { categories } = await collections();
-  const docs = await categories.find({ storeId }).sort({ name: 1 }).toArray();
-  return docs.map(categoryDTO);
+  const result = await getAdmin()
+    .from("categories")
+    .select("*")
+    .eq("store_id", storeId)
+    .order("name");
+  return (assertData(result) as CategoryRow[]).map(categoryDTO);
 }
-
-/** نقشه‌ی categoryId → دسته (برای وصل‌کردن محصول به دسته‌اش) */
-export async function mapCategories(
-  storeId: string,
-  ids: (string | null | undefined)[],
-): Promise<Map<string, CategoryDoc>> {
-  const unique = [...new Set(ids.filter(Boolean).map((v) => String(v)))];
-  if (unique.length === 0) return new Map();
-  const { categories } = await collections();
-  const docs = await categories
-    .find({ storeId, _id: { $in: unique.map((v) => oid(v)) } } as Filter<CategoryDoc>)
-    .toArray();
-  return new Map(docs.map((d) => [idOf(d._id), d]));
-}
-
-// ------------------------------------------------------------
-// Products
-// ------------------------------------------------------------
 
 export interface ListProductsOptions {
   search?: string;
   categoryId?: string;
   lowStock?: boolean;
+  outOfStock?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -93,254 +97,154 @@ export async function listProducts(
   storeId: string,
   options: ListProductsOptions = {},
 ): Promise<Page<Product>> {
-  const { products } = await collections();
   const page = Math.max(1, options.page ?? 1);
-  const pageSize = Math.min(200, Math.max(1, options.pageSize ?? 20));
+  const pageSize = Math.min(500, Math.max(1, options.pageSize ?? 20));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
 
-  const filter: Filter<ProductDoc> = {
-    storeId,
-    ...(options.categoryId ? { categoryId: options.categoryId } : {}),
-    ...(options.search
-      ? {
-          $or: [
-            containsFilter("name", options.search),
-            containsFilter("barcode", options.search),
-            containsFilter("sku", options.search),
-          ] as Filter<ProductDoc>[],
-        }
-      : {}),
-  };
+  let query = getAdmin()
+    .from("products")
+    .select(PRODUCT_SELECT, { count: "exact" })
+    .eq("store_id", storeId);
 
-  // «کم‌موجود» مقایسه‌ی بین دو فیلد است؛ در MongoDB با $expr انجام می‌شود.
-  if (options.lowStock) {
-    Object.assign(filter, { $expr: { $lte: ["$stock", "$lowStockThreshold"] } });
+  if (options.categoryId) query = query.eq("category_id", options.categoryId);
+  if (options.lowStock) query = query.eq("is_low_stock", true);
+  if (options.outOfStock) query = query.eq("stock", 0);
+  const search = options.search ? escapeIlike(options.search) : "";
+  if (search) {
+    query = query.or(`name.ilike.%${search}%,barcode.ilike.%${search}%,sku.ilike.%${search}%`);
   }
 
-  const [total, docs] = await Promise.all([
-    products.countDocuments(filter),
-    products
-      .find(filter)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
-      .toArray(),
-  ]);
-
-  const cats = await mapCategories(storeId, docs.map((d) => d.categoryId));
-
-  return pageDTO(
-    docs.map((d) => productDTO(d, cats.get(idOf(d.categoryId)))),
-    total,
-    page,
-    pageSize,
-  );
+  const result = await query.order("created_at", { ascending: false }).range(from, to);
+  const rows = assertData(result) as unknown as ProductRow[];
+  return pageDTO(rows.map((row) => productDTO(row)), result.count ?? rows.length, page, pageSize);
 }
 
-/** همه‌ی محصولات یک فروشگاه (برای فرم‌ها و داشبورد) */
 export async function listAllProducts(storeId: string): Promise<Product[]> {
-  const { products } = await collections();
-  const docs = await products.find({ storeId }).sort({ name: 1 }).toArray();
-  const cats = await mapCategories(storeId, docs.map((d) => d.categoryId));
-  return docs.map((d) => productDTO(d, cats.get(idOf(d.categoryId))));
-}
-
-export async function findProductDoc(storeId: string, id: string): Promise<ProductDoc | null> {
-  const { products } = await collections();
-  return products.findOne({ _id: oid(id), storeId });
-}
-
-export async function findProductDocByBarcode(
-  storeId: string,
-  barcode: string,
-): Promise<ProductDoc | null> {
-  const { products } = await collections();
-  return products.findOne({ storeId, barcode });
+  const page = await listProducts(storeId, { page: 1, pageSize: 500 });
+  return page.items;
 }
 
 export async function getProduct(storeId: string, id: string): Promise<Product | null> {
-  const doc = await findProductDoc(storeId, id);
-  if (!doc) return null;
-  const cats = await mapCategories(storeId, [doc.categoryId]);
-  return productDTO(doc, cats.get(idOf(doc.categoryId)));
+  const result = await getAdmin()
+    .from("products")
+    .select(PRODUCT_SELECT)
+    .eq("store_id", storeId)
+    .eq("id", id)
+    .maybeSingle();
+  const row = assertData(result) as unknown as ProductRow | null;
+  return row ? productDTO(row) : null;
 }
 
-// ------------------------------------------------------------
-// Customers
-// ------------------------------------------------------------
+export async function findProductByBarcode(storeId: string, barcode: string): Promise<Product | null> {
+  const result = await getAdmin()
+    .from("products")
+    .select(PRODUCT_SELECT)
+    .eq("store_id", storeId)
+    .eq("barcode", barcode)
+    .maybeSingle();
+  const row = assertData(result) as unknown as ProductRow | null;
+  return row ? productDTO(row) : null;
+}
 
 export async function listCustomers(storeId: string, search?: string): Promise<Customer[]> {
-  const { customers } = await collections();
-  const filter: Filter<CustomerDoc> = {
-    storeId,
-    ...(search
-      ? {
-          $or: [
-            containsFilter("name", search),
-            containsFilter("phone", search),
-          ] as Filter<CustomerDoc>[],
-        }
-      : {}),
-  };
-  const docs = await customers.find(filter).sort({ createdAt: -1 }).limit(200).toArray();
-  return docs.map(customerDTO);
+  let query = getAdmin().from("customers").select("*").eq("store_id", storeId);
+  const q = search ? escapeIlike(search) : "";
+  if (q) query = query.or(`name.ilike.%${q}%,phone.ilike.%${q}%,address.ilike.%${q}%`);
+  const result = await query.order("created_at", { ascending: false }).limit(500);
+  return (assertData(result) as CustomerRow[]).map(customerDTO);
 }
 
-export async function findCustomerDoc(id: string | null): Promise<CustomerDoc | null> {
-  if (!id) return null;
-  const { customers } = await collections();
-  return customers.findOne({ _id: oid(id) });
+export async function getCustomer(storeId: string, id: string): Promise<Customer | null> {
+  const result = await getAdmin()
+    .from("customers")
+    .select("*")
+    .eq("store_id", storeId)
+    .eq("id", id)
+    .maybeSingle();
+  const row = assertData(result) as CustomerRow | null;
+  return row ? customerDTO(row) : null;
 }
-
-// ------------------------------------------------------------
-// Invoices
-// ------------------------------------------------------------
 
 export interface ListInvoicesOptions {
   status?: string;
+  search?: string;
   page?: number;
   pageSize?: number;
   from?: Date;
   to?: Date;
 }
 
-/** وصل‌کردن فاکتور به مشتری و محصول‌هایش با دو کوئری `$in` */
-async function attachInvoiceRelations(docs: InvoiceDoc[]) {
-  const { customers, products } = await collections();
-
-  const customerIds = [...new Set(docs.map((d) => d.customerId).filter(Boolean))].map((v) =>
-    oid(v),
-  );
-  const productIds = [
-    ...new Set(docs.flatMap((d) => (d.items ?? []).map((i) => i.productId)).filter(Boolean)),
-  ].map((v) => oid(v));
-
-  const [customerDocs, productDocs] = await Promise.all([
-    customerIds.length
-      ? customers.find({ _id: { $in: customerIds } } as Filter<CustomerDoc>).toArray()
-      : Promise.resolve([] as CustomerDoc[]),
-    productIds.length
-      ? products.find({ _id: { $in: productIds } } as Filter<ProductDoc>).toArray()
-      : Promise.resolve([] as ProductDoc[]),
-  ]);
-
-  return {
-    customers: new Map(customerDocs.map((c) => [idOf(c._id), c])),
-    products: new Map(productDocs.map((p) => [idOf(p._id), p])),
-  };
-}
-
 export async function listInvoices(
   storeId: string,
   options: ListInvoicesOptions = {},
 ): Promise<Page<Invoice>> {
-  const { invoices } = await collections();
   const page = Math.max(1, options.page ?? 1);
-  const pageSize = Math.min(200, Math.max(1, options.pageSize ?? 20));
+  const pageSize = Math.min(200, Math.max(1, options.pageSize ?? 50));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
 
-  const filter: Filter<InvoiceDoc> = {
-    storeId,
-    ...(options.status ? { status: options.status as InvoiceDoc["status"] } : {}),
-    ...(options.from || options.to
-      ? {
-          createdAt: {
-            ...(options.from ? { $gte: options.from } : {}),
-            ...(options.to ? { $lte: options.to } : {}),
-          },
-        }
-      : {}),
-  };
+  let query = getAdmin()
+    .from("invoices")
+    .select(INVOICE_SELECT, { count: "exact" })
+    .eq("store_id", storeId);
 
-  const [total, docs] = await Promise.all([
-    invoices.countDocuments(filter),
-    invoices
-      .find(filter)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
-      .toArray(),
-  ]);
+  if (options.status) query = query.eq("status", options.status);
+  if (options.from) query = query.gte("created_at", options.from.toISOString());
+  if (options.to) query = query.lte("created_at", options.to.toISOString());
 
-  const { customers, products } = await attachInvoiceRelations(docs);
+  const search = options.search ? escapeIlike(options.search) : "";
+  if (search) {
+    const customers = await getAdmin()
+      .from("customers")
+      .select("id")
+      .eq("store_id", storeId)
+      .or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+    const ids = ((customers.data ?? []) as { id: string }[]).map((row) => row.id);
+    if (ids.length > 0) {
+      query = query.or(`number.ilike.%${search}%,customer_id.in.(${ids.join(",")})`);
+    } else {
+      query = query.ilike("number", `%${search}%`);
+    }
+  }
 
-  return pageDTO(
-    docs.map((d) =>
-      invoiceDTO(d, { customer: customers.get(idOf(d.customerId)) ?? null, products }),
-    ),
-    total,
-    page,
-    pageSize,
-  );
+  const result = await query.order("created_at", { ascending: false }).range(from, to);
+  const rows = assertData(result) as unknown as InvoiceRow[];
+  return pageDTO(rows.map(invoiceDTO), result.count ?? rows.length, page, pageSize);
 }
 
 export async function getInvoice(storeId: string, id: string): Promise<Invoice | null> {
-  const { invoices } = await collections();
-  const doc = await invoices.findOne({ _id: oid(id), storeId });
-  if (!doc) return null;
-  const { customers, products } = await attachInvoiceRelations([doc]);
-  return invoiceDTO(doc, {
-    customer: customers.get(idOf(doc.customerId)) ?? null,
-    products,
-  });
+  const result = await getAdmin()
+    .from("invoices")
+    .select(INVOICE_SELECT)
+    .eq("store_id", storeId)
+    .eq("id", id)
+    .maybeSingle();
+  const row = assertData(result) as unknown as InvoiceRow | null;
+  return row ? invoiceDTO(row) : null;
 }
-
-export async function findInvoiceDoc(
-  storeId: string,
-  id: string,
-): Promise<InvoiceDoc | null> {
-  const { invoices } = await collections();
-  return invoices.findOne({ _id: oid(id), storeId });
-}
-
-// ------------------------------------------------------------
-// Expenses
-// ------------------------------------------------------------
 
 export async function listExpenses(
   storeId: string,
-  options: { from?: Date; to?: Date; page?: number; pageSize?: number } = {},
+  options: { from?: Date; to?: Date; page?: number; pageSize?: number; search?: string } = {},
 ): Promise<Page<Expense>> {
-  const { expenses, expenseCategories } = await collections();
   const page = Math.max(1, options.page ?? 1);
-  const pageSize = Math.min(200, Math.max(1, options.pageSize ?? 20));
+  const pageSize = Math.min(200, Math.max(1, options.pageSize ?? 50));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
 
-  const filter: Filter<ExpenseDoc> = {
-    storeId,
-    ...(options.from || options.to
-      ? {
-          date: {
-            ...(options.from ? { $gte: options.from } : {}),
-            ...(options.to ? { $lte: options.to } : {}),
-          },
-        }
-      : {}),
-  };
+  let query = getAdmin()
+    .from("expenses")
+    .select("*, expense_categories(id, name, store_id)", { count: "exact" })
+    .eq("store_id", storeId);
+  if (options.from) query = query.gte("date", options.from.toISOString());
+  if (options.to) query = query.lte("date", options.to.toISOString());
+  const search = options.search ? escapeIlike(options.search) : "";
+  if (search) query = query.ilike("title", `%${search}%`);
 
-  const [total, docs] = await Promise.all([
-    expenses.countDocuments(filter),
-    expenses
-      .find(filter)
-      .sort({ date: -1 })
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
-      .toArray(),
-  ]);
-
-  const categoryIds = [...new Set(docs.map((d) => d.categoryId).filter(Boolean))].map((v) =>
-    oid(v),
-  );
-  const catDocs: ExpenseCategoryDoc[] = categoryIds.length
-    ? await expenseCategories
-        .find({ _id: { $in: categoryIds } } as Filter<ExpenseCategoryDoc>)
-        .toArray()
-    : [];
-  const cats = new Map(catDocs.map((c) => [idOf(c._id), c]));
-
-  return pageDTO(
-    docs.map((d) => expenseDTO(d, cats.get(idOf(d.categoryId)))),
-    total,
-    page,
-    pageSize,
-  );
+  const result = await query.order("date", { ascending: false }).range(from, to);
+  const rows = assertData(result) as ExpenseRow[];
+  return pageDTO(rows.map((row) => expenseDTO(row)), result.count ?? rows.length, page, pageSize);
 }
 
 export async function listAllExpenses(storeId: string, limit = 100): Promise<Expense[]> {
@@ -349,59 +253,95 @@ export async function listAllExpenses(storeId: string, limit = 100): Promise<Exp
 }
 
 export async function listExpenseCategories(storeId: string): Promise<ExpenseCategory[]> {
-  const { expenseCategories } = await collections();
-  const docs = await expenseCategories.find({ storeId }).sort({ name: 1 }).toArray();
-  return docs.map(expenseCategoryDTO);
+  const result = await getAdmin()
+    .from("expense_categories")
+    .select("id, name, store_id")
+    .eq("store_id", storeId)
+    .order("name");
+  return (assertData(result) as { id: string; name: string; store_id: string }[]).map((row) => ({
+    id: row.id,
+    name: row.name,
+    storeId: row.store_id,
+  }));
 }
 
-// ------------------------------------------------------------
-// Scan events
-// ------------------------------------------------------------
+export async function listPurchases(storeId: string): Promise<Purchase[]> {
+  const result = await getAdmin()
+    .from("purchases")
+    .select(PURCHASE_SELECT)
+    .eq("store_id", storeId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  return (assertData(result) as unknown as PurchaseRow[]).map(purchaseDTO);
+}
 
 export async function listScanEvents(
   storeId: string,
   options: { page?: number; pageSize?: number } = {},
 ): Promise<Page<ScanEvent>> {
-  const { scanEvents, products, users } = await collections();
   const page = Math.max(1, options.page ?? 1);
   const pageSize = Math.min(200, Math.max(1, options.pageSize ?? 30));
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  const result = await getAdmin()
+    .from("scan_events")
+    .select(
+      `id, product_id, barcode, type, qty, device, note, user_id, store_id, created_at,
+       products (id, name, barcode, sale_price, stock),
+       profiles (name, email)`,
+      { count: "exact" },
+    )
+    .eq("store_id", storeId)
+    .order("created_at", { ascending: false })
+    .range(from, to);
+  const rows = assertData(result) as unknown as ScanRow[];
+  return pageDTO(rows.map(scanEventDTO), result.count ?? rows.length, page, pageSize);
+}
 
-  const filter: Filter<ScanEventDoc> = { storeId };
+export async function listLedger(
+  storeId: string,
+  options: { from?: Date; to?: Date; account?: string; limit?: number } = {},
+): Promise<Transaction[]> {
+  let query = getAdmin().from("ledger_entries").select("*").eq("store_id", storeId);
+  if (options.from) query = query.gte("date", options.from.toISOString());
+  if (options.to) query = query.lte("date", options.to.toISOString());
+  if (options.account) query = query.eq("account", options.account);
+  const result = await query.order("date", { ascending: false }).limit(options.limit ?? 200);
+  return (assertData(result) as Parameters<typeof transactionDTO>[0][]).map(transactionDTO);
+}
 
-  const [total, docs] = await Promise.all([
-    scanEvents.countDocuments(filter),
-    scanEvents
-      .find(filter)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
-      .toArray(),
-  ]);
+export interface MovementRow {
+  id: string;
+  product_id: string;
+  type: string;
+  qty: number;
+  note: string | null;
+  created_at: string;
+  products?: { name: string } | { name: string }[] | null;
+}
 
-  const productIds = [...new Set(docs.map((d) => d.productId).filter(Boolean))].map((v) => oid(v));
-  const userIds = [...new Set(docs.map((d) => d.userId).filter(Boolean))].map((v) => oid(v));
+export async function listMovements(storeId: string, limit = 80) {
+  const result = await getAdmin()
+    .from("inventory_movements")
+    .select("id, product_id, type, qty, note, created_at, products(name)")
+    .eq("store_id", storeId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return assertData(result) as MovementRow[];
+}
 
-  const [productDocs, userDocs] = await Promise.all([
-    productIds.length
-      ? products.find({ _id: { $in: productIds } } as Filter<ProductDoc>).toArray()
-      : Promise.resolve([] as ProductDoc[]),
-    userIds.length
-      ? users.find({ _id: { $in: userIds } } as Filter<UserDoc>).toArray()
-      : Promise.resolve([] as UserDoc[]),
-  ]);
-
-  const prodMap = new Map(productDocs.map((p) => [idOf(p._id), p]));
-  const userMap = new Map(userDocs.map((u) => [idOf(u._id), u]));
-
-  return pageDTO(
-    docs.map((d) =>
-      scanEventDTO(d, {
-        product: prodMap.get(idOf(d.productId)) ?? null,
-        user: userMap.get(idOf(d.userId)) ?? null,
-      }),
-    ),
-    total,
-    page,
-    pageSize,
-  );
+export async function listStaff(storeId: string) {
+  const result = await getAdmin()
+    .from("profiles")
+    .select("id, name, email, role, active, created_at")
+    .eq("store_id", storeId)
+    .order("created_at");
+  return assertData(result) as {
+    id: string;
+    name: string | null;
+    email: string;
+    role: "ADMIN" | "CASHIER";
+    active: boolean;
+    created_at: string;
+  }[];
 }

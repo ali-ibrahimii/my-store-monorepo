@@ -26,6 +26,7 @@ export interface Customer {
   name: string;
   phone: string | null;
   address: string | null;
+  note?: string | null;
   /** positive: customer owes us */
   balance: number;
   storeId: string;
@@ -37,6 +38,7 @@ export interface CreateCustomerInput {
   name: string;
   phone?: string;
   address?: string;
+  note?: string;
 }
 
 export interface InvoiceItem {

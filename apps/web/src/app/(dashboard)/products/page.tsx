@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { Package } from "lucide-react";
 
 import {
@@ -8,35 +7,33 @@ import {
   CardHeader,
   CardTitle,
 } from "@my-store/ui-kit/components/card";
-import { storeCodeFromId, toPersianDigits } from "@my-store/shared-utils";
+import { toPersianDigits } from "@my-store/shared-utils";
 
 import { PageHeader } from "@/components/page-header";
-import { ProductForm } from "@/components/product-form";
-import { ProductsTable, type ProductRow } from "@/components/products-table";
-import { auth } from "@/lib/auth";
-import { listAllProducts, listCategories } from "@/lib/repositories";
+import { ProductsPanel, type ProductRow } from "@/components/products-panel";
+import { requirePageUser } from "@/lib/auth";
+import { getStore, listAllProducts, listCategories } from "@/lib/repositories";
 
 export const dynamic = "force-dynamic";
-
 export const metadata = { title: "محصولات" };
 
 export default async function ProductsPage() {
-  const session = await auth();
-  if (!session?.user?.storeId) redirect("/login");
-  const storeId = session.user.storeId;
-
-  const [products, categories] = await Promise.all([
-    listAllProducts(storeId),
-    listCategories(storeId),
+  const user = await requirePageUser();
+  const [products, categories, store] = await Promise.all([
+    listAllProducts(user.storeId),
+    listCategories(user.storeId),
+    getStore(user.storeId),
   ]);
-
+  const canManage = user.role === "ADMIN";
   const rows: ProductRow[] = products.map((product) => ({
     id: product.id,
     name: product.name,
     barcode: product.barcode,
-    sku: product.sku ?? null,
+    sku: product.sku,
+    description: product.description,
+    categoryId: product.categoryId,
     categoryName: product.category?.name ?? null,
-    costPrice: Number(product.costPrice),
+    costPrice: canManage ? Number(product.costPrice) : 0,
     salePrice: Number(product.salePrice),
     stock: Number(product.stock),
     lowStockThreshold: Number(product.lowStockThreshold),
@@ -46,41 +43,30 @@ export default async function ProductsPage() {
     <div className="space-y-6">
       <PageHeader
         title="محصولات"
-        description={`${toPersianDigits(products.length)} قلم کالا در انبار`}
+        description={`${toPersianDigits(products.length)} قلم — جست‌وجو، دسته، موجودی و قیمت`}
       />
-
-      <div className="grid gap-6 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Package className="size-4" />
-              لیست محصولات
-            </CardTitle>
-            <CardDescription>
-              جست‌وجو، فیلتر کم‌موجودها و وضعیت موجودی هر کالا
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ProductsTable products={rows} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>افزودن محصول</CardTitle>
-            <CardDescription>
-              بارکد دستی وارد کن یا خالی بگذار تا خودکار ساخته شود؛ برای ساخت دسته‌جمعی و
-              چاپ برچسب، تب «بارکدها» را ببین.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ProductForm
-              categories={categories}
-              storeCode={storeCodeFromId(storeId)}
-            />
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Package className="size-4" />
+            کاتالوگ و انبار
+          </CardTitle>
+          <CardDescription>
+            {canManage
+              ? "افزودن و تغییر قیمت در دیالوگ انجام می‌شود."
+              : "صندوق‌دار فقط می‌بیند و جست‌وجو می‌کند؛ تغییر قیمت و موجودی برای مدیر است."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProductsPanel
+            products={rows}
+            categories={categories}
+            canManage={canManage}
+            currency={store?.currency}
+            lowStockDefault={store?.lowStockDefault}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }
