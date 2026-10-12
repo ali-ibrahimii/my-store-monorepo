@@ -89,7 +89,7 @@ if (!ensureOnly) {
 // ------------------------------------------------------------
 // ۳) دیتابیس
 // ------------------------------------------------------------
-const uri = resolveMongoUri(env);
+const uri = resolveMongoUri(env, { log });
 const dbName = resolveDbName(uri, env);
 log(`دیتابیس هدف: ${redactMongoUri(uri)} → «${dbName}»`);
 
@@ -104,8 +104,9 @@ async function seedDatabase() {
     log("AUTO_SEED=0 → داده‌ی نمونه ساخته نشد.");
     return;
   }
-  const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
+  let client;
   try {
+    client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
     await client.connect();
     const result = await runDemoSeed(client.db(dbName), { log: (m) => log(m) });
     if (result?.seeded) {
@@ -118,7 +119,7 @@ async function seedDatabase() {
         `آن پروسه را ببندید (یا MONGO_PORT/MONGODB_URI را عوض کنید).`,
     );
   } finally {
-    await client.close().catch(() => {});
+    if (client) await client.close().catch(() => {});
   }
 }
 

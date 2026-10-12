@@ -51,9 +51,27 @@ export interface Collections {
 
 const FALLBACK_URI = "mongodb://127.0.0.1:27017/mystore?directConnection=true";
 const FALLBACK_DB = "mystore";
+const MONGO_SCHEME = /^mongodb(\+srv)?:\/\//i;
+let warnedBadUri = false;
 
 export function mongoUri(): string {
-  return process.env.MONGODB_URI || process.env.DATABASE_URL || FALLBACK_URI;
+  for (const name of ["MONGODB_URI", "DATABASE_URL"] as const) {
+    const value = process.env[name];
+    if (!value) continue;
+    if (MONGO_SCHEME.test(value.trim())) return value.trim();
+    // آدرس غیرMongoDB (مثلاً postgresql:// باقی‌مانده از نسخه‌ی قدیمی Prisma)
+    // نباید کل اپ را با MongoParseError بکُشد — نادیده‌اش می‌گیریم.
+    if (!warnedBadUri) {
+      warnedBadUri = true;
+      console.warn(
+        `[db] ${name} یک آدرس MongoDB نیست و نادیده گرفته شد. ` +
+          `این پروژه MongoDB می‌خواهد (mongodb:// یا mongodb+srv://)؛ ` +
+          `رشته‌های postgresql:// مال نسخه‌ی قدیمی Prisma/Postgres‌اند. ` +
+          `مقدار ${name} را در apps/web/.env.local پاک یا درست کنید.`,
+      );
+    }
+  }
+  return FALLBACK_URI;
 }
 
 /** نام دیتابیس از URI (یا از MONGODB_DB) */

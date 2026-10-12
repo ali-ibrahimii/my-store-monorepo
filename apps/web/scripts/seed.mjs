@@ -18,17 +18,17 @@ const webDir = fileURLToPath(new URL("..", import.meta.url));
 // اگر نبود، مقدارهای پیش‌فرض توسعه استفاده می‌شوند.
 const env = { ...readEnvFiles(webDir), ...process.env };
 
-const uri = resolveMongoUri(env);
+const uri = resolveMongoUri(env, { log: (m) => console.warn(`[seed] ${m}`) });
 const dbName = resolveDbName(uri, env);
-
-const client = new MongoClient(uri, { serverSelectionTimeoutMS: 10_000 });
 
 const fresh = process.argv.includes("--fresh");
 // --optional: اگر دیتابیس در دسترس نبود، فقط هشدار بده و با کد 0 خارج شو
 // (تا اسکریپت dev را متوقف نکند)
 const optional = process.argv.includes("--optional");
 
+let client;
 try {
+  client = new MongoClient(uri, { serverSelectionTimeoutMS: 10_000 });
   await client.connect();
   const db = client.db(dbName);
   console.log(`[seed] متصل به ${redactMongoUri(uri)} → دیتابیس «${dbName}»`);
@@ -56,5 +56,5 @@ try {
   );
   if (!optional) process.exitCode = 1;
 } finally {
-  await client.close().catch(() => {});
+  if (client) await client.close().catch(() => {});
 }

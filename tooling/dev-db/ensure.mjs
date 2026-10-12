@@ -57,13 +57,19 @@ export function parseEnvFile(content) {
   return out;
 }
 
-/** خواندن چند فایل env (اولی برنده است) — فایل‌های ناموجود نادیده گرفته می‌شوند. */
+/**
+ * خواندن چند فایل env (اولی برنده است) — فایل‌های ناموجود نادیده گرفته می‌شوند.
+ * ترتیب مثل Next.js: `.env.local` بر `.env` اولویت دارد.
+ */
 export function readEnvFiles(dir, names = [".env.local", ".env"]) {
   const result = {};
   for (const name of names) {
     const file = path.join(dir, name);
     try {
-      Object.assign(result, parseEnvFile(fs.readFileSync(file, "utf-8")));
+      const parsed = parseEnvFile(fs.readFileSync(file, "utf-8"));
+      for (const [key, value] of Object.entries(parsed)) {
+        if (!(key in result)) result[key] = value;
+      }
     } catch {
       // فایل نیست — طبیعی است
     }
@@ -133,8 +139,39 @@ export function ensureEnvFile(webDir, { log = () => {} } = {}) {
 // MongoDB target / URI helpers
 // ------------------------------------------------------------
 
-export function resolveMongoUri(env = process.env) {
-  return env.MONGODB_URI || env.DATABASE_URL || DEFAULT_URI;
+/**
+ * آیا رشته‌ی اتصال، یک آدرس MongoDB معتبر است؟
+ * (پروژه‌های قدیمی Prisma/Postgres رشته‌های postgresql:// دارند که برای
+ *  درایور mongodb غیرقابل‌پردازش‌اند و کل `pnpm dev` را می‌کُشند.)
+ */
+export function isMongoUri(uri) {
+  return typeof uri === "string" && /^mongodb(\+srv)?:\/\//i.test(uri.trim());
+}
+
+/**
+ * آدرس MongoDB را از env پیدا می‌کند؛ اگر مقدار تنظیم‌شده MongoDB نباشد
+ * (مثلاً DATABASE_URL یا MONGODB_URI قدیمی با طرح postgresql://)،
+ * به‌جای کرش با «MongoParseError: Invalid scheme»، هشدار روشن می‌دهد
+ * و به آدرس پیش‌فرض برمی‌گردد.
+ */
+export function resolveMongoUri(env = process.env, { log = () => {} } = {}) {
+  const candidates = [
+    ["MONGODB_URI", env.MONGODB_URI],
+    ["DATABASE_URL", env.DATABASE_URL],
+  ];
+  for (const [name, value] of candidates) {
+    if (!value) continue;
+    if (isMongoUri(value)) return value.trim();
+    log(
+      `⚠ ${name} یک آدرس MongoDB نیست و نادیده گرفته شد: ${redactMongoUri(value.trim())}\n` +
+        `        این پروژه از MongoDB استفاده می‌کند؛ آدرس باید با mongodb:// یا mongodb+srv:// شروع شود.\n` +
+        `        (رشته‌های postgresql:// باقی‌مانده از نسخه‌ی قدیمی Prisma/Postgres پروژه‌اند.)\n` +
+        `        برای اصلاح: مقدار ${name} را در apps/web/.env.local پاک یا درست کنید،\n` +
+        `        یا متغیر محیطی آن را حذف کنید (PowerShell: Remove-Item Env:${name}).\n` +
+        `        فعلاً از آدرس پیش‌فرض استفاده می‌شود: ${DEFAULT_URI}`,
+    );
+  }
+  return DEFAULT_URI;
 }
 
 /** نام دیتابیس از URI (یا از MONGODB_DB) */
