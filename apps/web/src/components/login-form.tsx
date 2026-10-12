@@ -1,20 +1,60 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { Button, Input, Label } from "@my-store/ui-kit";
 
+/**
+ * پیام مناسب برای هر کد خطای Auth.js.
+ * (Auth.js کد را در URL/پاسخ `signIn` برمی‌گرداند: result.code)
+ */
+function errorMessage(error?: string | null, code?: string | null): string | null {
+  if (code === "db_unavailable") {
+    return "اتصال به دیتابیس برقرار نیست (سرور MongoDB اجرا نشده). با `pnpm dev` دیتابیس هم خودکار بالا می‌آید.";
+  }
+  if (code === "server_error") {
+    return "خطای غیرمنتظره‌ای در سرور رخ داد. لاگ ترمینال سرور را ببینید.";
+  }
+  if (error === "Configuration") {
+    return "تنظیمات سرور کامل نیست (مثلاً AUTH_SECRET). فایل .env.local را بررسی کنید.";
+  }
+  if (error === "CredentialsSignin") {
+    return "ایمیل یا رمز عبور اشتباه است";
+  }
+  return null;
+}
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(
-    searchParams.get("error") === "CredentialsSignin"
-      ? "ایمیل یا رمز عبور اشتباه است"
-      : null,
+    errorMessage(searchParams.get("error"), searchParams.get("code")),
   );
   const [busy, setBusy] = useState(false);
+  const [dbWarning, setDbWarning] = useState<string | null>(null);
+
+  // اگر دیتابیس در دسترس نباشد، کاربر باید همان اول بفهمد — نه اینکه
+  // فکر کند «رمز اشتباه است».
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/health", { cache: "no-store" })
+      .then((res) => res.json().then((body) => ({ ok: res.ok, body })))
+      .then(({ ok, body }) => {
+        if (cancelled || ok) return;
+        setDbWarning(
+          `دیتابیس در دسترس نیست (${body?.db ?? "mongodb"}). ` +
+            "ترمینال را ببینید یا `pnpm dev` را دوباره اجرا کنید.",
+        );
+      })
+      .catch(() => {
+        /* اگر خود endpoint در دسترس نبود، ساکت می‌مانیم */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,7 +70,10 @@ export function LoginForm() {
 
     setBusy(false);
     if (result?.error) {
-      setError("ایمیل یا رمز عبور اشتباه است");
+      setError(
+        errorMessage(result.error, (result as { code?: string }).code) ??
+          "ورود ناموفق بود؛ دوباره تلاش کنید",
+      );
       return;
     }
     // احترام به callbackUrl (فقط مسیرهای داخلی مجاز هستند)
@@ -53,6 +96,15 @@ export function LoginForm() {
         <Label htmlFor="password">رمز عبور</Label>
         <Input id="password" name="password" type="password" required dir="ltr" placeholder="••••••" />
       </div>
+
+      {dbWarning ? (
+        <p className="rounded-md bg-amber-500/10 p-2 text-sm text-amber-700 dark:text-amber-400">
+          {dbWarning}{" "}
+          <a href="/api/health" className="underline" target="_blank" rel="noreferrer">
+            جزئیات
+          </a>
+        </p>
+      ) : null}
 
       {error ? (
         <p className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{error}</p>

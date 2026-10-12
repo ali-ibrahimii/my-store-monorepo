@@ -12,10 +12,12 @@ const nextConfig: NextConfig = {
     // only one, so inference and this pin agree.)
     root: workspaceRoot,
   },
-  // Next.js 16 blocks cross-origin dev requests by default. The Arena/sandbox
-  // live preview serves the app from an *.e2b.app host, so allow that origin
-  // (harmless elsewhere — it only affects the dev server).
-  allowedDevOrigins: ["*.e2b.app"],
+  // Next.js 16 blocks cross-origin dev requests to /_next and /__nextjs
+  // by default. The Arena/sandbox live preview serves the app behind a
+  // proxy host (sbx-*.arena.site / *.e2b.app), so allow those hosts —
+  // otherwise HMR/asset requests coming with an Origin header get 403.
+  // (Harmless elsewhere: it only affects the dev server.)
+  allowedDevOrigins: ["*.e2b.app", "*.arena.site", "*.arena.ai"],
   // Shared workspace packages are consumed as TypeScript source.
   transpilePackages: [
     "@my-store/shared-types",

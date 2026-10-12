@@ -102,6 +102,9 @@ importers:
         specifier: ^5.0.14
         version: 5.0.15(@types/react@19.3.0)(react@19.2.4)
     devDependencies:
+      '@my-store/dev-db':
+        specifier: workspace:*
+        version: link:../../tooling/dev-db
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.3.3

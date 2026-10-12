@@ -2,27 +2,26 @@
 // CLI seed:  pnpm db:seed
 //
 // داده‌ی نمونه را داخل MongoDB می‌سازد (اگر از قبل باشد، چیزی نمی‌سازد).
+//
+// نکته: `pnpm dev` خودش این کار را انجام می‌دهد؛ این اسکریپت برای
+// ریختن دستی داده (و `pnpm db:reset` که --fresh می‌دهد) است.
 // ============================================================
 
 import { MongoClient } from "mongodb";
+import { readEnvFiles, redactMongoUri, resolveDbName, resolveMongoUri } from "@my-store/dev-db";
+import { fileURLToPath } from "node:url";
 import { runDemoSeed } from "./demo-seed.mjs";
 
-const FALLBACK_URI = "mongodb://127.0.0.1:27017/mystore?directConnection=true";
-const FALLBACK_DB = "mystore";
+const webDir = fileURLToPath(new URL("..", import.meta.url));
+// مثل Next، مقادیر .env.local/.env را می‌خوانیم تا با `pnpm dev` یکی باشد.
+// توجه: این اسکریپت فایل .env.local نمی‌سازد (کار `pnpm dev` است)؛
+// اگر نبود، مقدارهای پیش‌فرض توسعه استفاده می‌شوند.
+const env = { ...readEnvFiles(webDir), ...process.env };
 
-function uri() {
-  return process.env.MONGODB_URI || process.env.DATABASE_URL || FALLBACK_URI;
-}
+const uri = resolveMongoUri(env);
+const dbName = resolveDbName(uri, env);
 
-function dbName() {
-  if (process.env.MONGODB_DB) return process.env.MONGODB_DB;
-  const withoutQuery = uri().split("?")[0];
-  const schemeEnd = withoutQuery.indexOf("://");
-  const slash = withoutQuery.indexOf("/", schemeEnd === -1 ? 0 : schemeEnd + 3);
-  return (slash === -1 ? "" : withoutQuery.slice(slash + 1)) || FALLBACK_DB;
-}
-
-const client = new MongoClient(uri(), { serverSelectionTimeoutMS: 10_000 });
+const client = new MongoClient(uri, { serverSelectionTimeoutMS: 10_000 });
 
 const fresh = process.argv.includes("--fresh");
 // --optional: اگر دیتابیس در دسترس نبود، فقط هشدار بده و با کد 0 خارج شو
@@ -31,8 +30,8 @@ const optional = process.argv.includes("--optional");
 
 try {
   await client.connect();
-  const db = client.db(dbName());
-  console.log(`[seed] متصل به ${uri()} → دیتابیس «${dbName()}»`);
+  const db = client.db(dbName);
+  console.log(`[seed] متصل به ${redactMongoUri(uri)} → دیتابیس «${dbName}»`);
 
   if (fresh) {
     console.log("[seed] --fresh: dropping database first");
@@ -51,8 +50,9 @@ try {
   console.error("[seed] ناموفق:", error?.message ?? error);
   console.error(
     "[seed] آیا MongoDB در حال اجراست؟\n" +
-      "        - با Docker:   pnpm docker:up\n" +
-      "        - بدون Docker: pnpm db:sandbox",
+      "        - ساده‌ترین راه:  pnpm dev   (دیتابیس را خودش بالا می‌آورد)\n" +
+      "        - دستی:           pnpm db:sandbox\n" +
+      "        - با Docker:      pnpm docker:up",
   );
   if (!optional) process.exitCode = 1;
 } finally {
