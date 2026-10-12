@@ -102,22 +102,38 @@ export async function runDemoSeed(db, options = {}) {
   const catDrinks = new ObjectId(catDrinkRef);
   const catFood = new ObjectId(catFoodRef);
   const catHome = new ObjectId(catHomeRef);
+  const catDairyRef = new ObjectId().toHexString();
+  const catSnackRef = new ObjectId().toHexString();
+  const catDairy = new ObjectId(catDairyRef);
+  const catSnack = new ObjectId(catSnackRef);
   await categories.insertMany([
     { _id: catDrinks, name: "نوشیدنی", slug: "drinks", storeId: storeRef, createdAt: now, updatedAt: now },
     { _id: catFood, name: "خوراکی", slug: "food", storeId: storeRef, createdAt: now, updatedAt: now },
     { _id: catHome, name: "خانگی", slug: "home", storeId: storeRef, createdAt: now, updatedAt: now },
+    { _id: catDairy, name: "لبنیات", slug: "dairy", storeId: storeRef, createdAt: now, updatedAt: now },
+    { _id: catSnack, name: "تنقلات", slug: "snacks", storeId: storeRef, createdAt: now, updatedAt: now },
   ]);
 
   // ---- Products (بارکدهای معتبر EAN-13) ----------------------
   const productSeed = [
-    { name: "شیر کم‌چرب ۱ لیتری", base: "628111100001", cost: 45000, sale: 52000, stock: 40, categoryId: catDrinkRef },
+    { name: "شیر کم‌چرب ۱ لیتری", base: "628111100001", cost: 45000, sale: 52000, stock: 40, categoryId: catDairyRef },
     { name: "آب معدنی ۱.۵ لیتری", base: "628111100002", cost: 12000, sale: 18000, stock: 200, categoryId: catDrinkRef },
     { name: "نوشابه cola ۳۳۰ml", base: "628111100003", cost: 18000, sale: 25000, stock: 120, categoryId: catDrinkRef },
     { name: "برنج ایرانی ۱۰ کیلویی", base: "628111100004", cost: 850000, sale: 980000, stock: 15, categoryId: catFoodRef },
     { name: "چای صبحانه ۴۵۰ گرم", base: "628111100005", cost: 120000, sale: 145000, stock: 30, categoryId: catFoodRef },
     { name: "شکر ۱ کیلویی", base: "628111100006", cost: 38000, sale: 45000, stock: 60, categoryId: catFoodRef },
-    { name: "بیسکوییت ساده ۲۵۰ گرم", base: "628111100007", cost: 22000, sale: 30000, stock: 80, categoryId: catFoodRef },
+    { name: "بیسکوییت ساده ۲۵۰ گرم", base: "628111100007", cost: 22000, sale: 30000, stock: 80, categoryId: catSnackRef },
     { name: "روغن مایع ۱.۵ لیتری", base: "628111100008", cost: 95000, sale: 115000, stock: 8, categoryId: catHomeRef },
+    { name: "ماست پرچرب ۹۰۰ گرم", base: "628111100009", cost: 55000, sale: 65000, stock: 25, categoryId: catDairyRef },
+    { name: "پنیر سفید ۴۰۰ گرم", base: "628111100010", cost: 68000, sale: 82000, stock: 18, categoryId: catDairyRef },
+    { name: "کره ۱۰۰ گرمی", base: "628111100011", cost: 72000, sale: 88000, stock: 22, categoryId: catDairyRef },
+    { name: "دوغ گازدار ۱.۵ لیتری", base: "628111100012", cost: 25000, sale: 34000, stock: 48, categoryId: catDrinkRef },
+    { name: "رب گوجه ۸۰۰ گرم", base: "628111100013", cost: 85000, sale: 102000, stock: 35, categoryId: catFoodRef },
+    { name: "ماکارونی ۷۰۰ گرم", base: "628111100014", cost: 42000, sale: 53000, stock: 55, categoryId: catFoodRef },
+    { name: "چیپس خلالی ۹۰ گرم", base: "628111100015", cost: 35000, sale: 48000, stock: 64, categoryId: catSnackRef },
+    { name: "شکلات تخته‌ای ۱۰۰ گرم", base: "628111100016", cost: 48000, sale: 62000, stock: 42, categoryId: catSnackRef },
+    { name: "مایع ظرفشویی ۱ لیتری", base: "628111100017", cost: 62000, sale: 78000, stock: 28, categoryId: catHomeRef },
+    { name: "پودر لباسشویی ۲ کیلویی", base: "628111100018", cost: 185000, sale: 225000, stock: 12, categoryId: catHomeRef },
   ];
   const createdProducts = productSeed.map((p) => ({
     _id: new ObjectId(),
@@ -141,6 +157,8 @@ export async function runDemoSeed(db, options = {}) {
     { name: "علی محمدی", phone: "09120000001", address: "تهران، خیابان ولیعصر" },
     { name: "سارا احمدی", phone: "09121111111", address: "تهران، میدان آزادی" },
     { name: "شرکت پخش مواد غذایی", phone: "09122222222", address: null },
+    { name: "رضا کریمی", phone: "09123333333", address: "تهران، خیابان شریعتی" },
+    { name: "مریم حسینی", phone: "09124444444", address: "کرج، میدان کرج" },
   ].map((c) => ({
     _id: new ObjectId(),
     ...c,

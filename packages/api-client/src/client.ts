@@ -120,13 +120,6 @@ export async function apiRequest<T = unknown>(
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-  // [debug موقت] برای تشخیص اینکه مرورگر کدام باندل را اجرا می‌کند و
-  // آیا هدر Authorization واقعاً فرستاده شده — بعد از عیب‌یابی حذف شود.
-  (globalThis as { __MYSTORE_DEBUG__?: unknown }).__MYSTORE_DEBUG__ = {
-    bundle: "v5-query-token",
-    last: { method, url: finalUrl, hadAuth: Boolean(token), status: response.status },
-  };
-
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;
 
