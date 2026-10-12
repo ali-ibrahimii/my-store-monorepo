@@ -51,5 +51,8 @@ export function clearSession(): void {
 
 /** آدرس API که اپ به آن وصل است (برای نمایش در صفحه‌ی ورود) */
 export function apiBaseUrlLabel(): string {
-  return API_BASE_URL || "همان دامنه (پروکسی توسعه)";
+  if (API_BASE_URL) return API_BASE_URL;
+  return import.meta.env.DEV
+    ? `پروکسی توسعه → ${__API_ORIGIN__}`
+    : "همان دامنه";
 }
