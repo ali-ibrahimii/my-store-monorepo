@@ -1,129 +1,199 @@
-import type { Prisma } from "@prisma/client";
+// ============================================================
+// DTO mapping: MongoDB document → شکل JSON که کلاینت‌ها می‌شناسند
+//
+// چرا لازم است؟
+//   - در MongoDB کلید اصلی `_id` از نوع ObjectId است، ولی در JSON باید
+//     رشته باشد. این لایه ObjectId → string و Date → ISO string می‌کند.
+//   - کلاینت (وب و موبایل) نباید هیچ‌وقت شکل داخلی دیتابیس را ببیند.
+// ============================================================
+
 import type {
   Category,
   Customer,
   Expense,
+  ExpenseCategory,
   Invoice,
+  InvoiceItem,
   Page,
-  PaymentMethod,
+  Payment,
   Product,
+  ScanEvent,
+  Transaction,
 } from "@my-store/shared-types";
+import { idOf } from "./db";
+import type {
+  CategoryDoc,
+  CustomerDoc,
+  ExpenseCategoryDoc,
+  ExpenseDoc,
+  InvoiceDoc,
+  ProductDoc,
+  ScanEventDoc,
+  TransactionDoc,
+  UserDoc,
+} from "./models";
 
-// Precise Prisma payload types (what the queries actually return)
-export type CategoryPayload = Prisma.CategoryGetPayload<Record<string, never>>;
-export type ProductPayload = Prisma.ProductGetPayload<Record<string, never>> & {
-  category?: CategoryPayload | null;
-};
-export type CustomerPayload = Prisma.CustomerGetPayload<Record<string, never>>;
-export type InvoicePayload = Prisma.InvoiceGetPayload<{
-  include: {
-    items: { include: { product: true } };
-    customer: true;
-    payments: true;
-  };
-}>;
-export type ExpensePayload = Prisma.ExpenseGetPayload<{ include: { category: true } }>;
+const iso = (value: Date | string | null | undefined): string =>
+  value instanceof Date ? value.toISOString() : (value ?? new Date(0).toISOString());
 
-const num = (value: unknown): number => Number(value ?? 0);
-const iso = (value: Date | string): string =>
-  value instanceof Date ? value.toISOString() : value;
-
-export function categoryDTO(c: CategoryPayload): Category {
+export function categoryDTO(c: CategoryDoc): Category {
   return {
-    id: c.id,
+    id: idOf(c._id),
     name: c.name,
     slug: c.slug,
-    storeId: c.storeId,
+    storeId: idOf(c.storeId),
     createdAt: iso(c.createdAt),
     updatedAt: iso(c.updatedAt),
   };
 }
 
-export function productDTO(p: ProductPayload): Product {
+export function productDTO(p: ProductDoc, category?: CategoryDoc | null): Product {
   return {
-    id: p.id,
+    id: idOf(p._id),
     name: p.name,
-    sku: p.sku,
+    sku: p.sku ?? null,
     barcode: p.barcode,
-    description: p.description,
-    costPrice: num(p.costPrice),
-    salePrice: num(p.salePrice),
-    stock: p.stock,
-    lowStockThreshold: p.lowStockThreshold,
-    categoryId: p.categoryId,
-    category: p.category ? categoryDTO(p.category) : null,
-    storeId: p.storeId,
+    description: p.description ?? null,
+    costPrice: Number(p.costPrice ?? 0),
+    salePrice: Number(p.salePrice ?? 0),
+    stock: Number(p.stock ?? 0),
+    lowStockThreshold: Number(p.lowStockThreshold ?? 0),
+    categoryId: idOf(p.categoryId) || null,
+    category: category ? categoryDTO(category) : null,
+    storeId: idOf(p.storeId),
     createdAt: iso(p.createdAt),
     updatedAt: iso(p.updatedAt),
   };
 }
 
-export function customerDTO(c: CustomerPayload): Customer {
+export function customerDTO(c: CustomerDoc): Customer {
   return {
-    id: c.id,
+    id: idOf(c._id),
     name: c.name,
-    phone: c.phone,
-    address: c.address,
-    balance: num(c.balance),
-    storeId: c.storeId,
+    phone: c.phone ?? null,
+    address: c.address ?? null,
+    balance: Number(c.balance ?? 0),
+    storeId: idOf(c.storeId),
     createdAt: iso(c.createdAt),
     updatedAt: iso(c.updatedAt),
   };
 }
 
-export function invoiceDTO(i: InvoicePayload): Invoice {
+export function expenseCategoryDTO(c: ExpenseCategoryDoc): ExpenseCategory {
+  return { id: idOf(c._id), name: c.name, storeId: idOf(c.storeId) };
+}
+
+export function expenseDTO(e: ExpenseDoc, category?: ExpenseCategoryDoc | null): Expense {
   return {
-    id: i.id,
+    id: idOf(e._id),
+    title: e.title,
+    amount: Number(e.amount ?? 0),
+    date: iso(e.date),
+    note: e.note ?? null,
+    receiptUrl: e.receiptUrl ?? null,
+    categoryId: idOf(e.categoryId) || null,
+    category: category ? expenseCategoryDTO(category) : null,
+    storeId: idOf(e.storeId),
+    createdById: idOf(e.createdById),
+    createdAt: iso(e.createdAt),
+  };
+}
+
+export function transactionDTO(t: TransactionDoc): Transaction {
+  return {
+    id: idOf(t._id),
+    date: iso(t.date),
+    account: t.account,
+    type: t.type,
+    amount: Number(t.amount ?? 0),
+    refType: t.refType ?? null,
+    refId: t.refId ?? null,
+    note: t.note ?? null,
+    storeId: idOf(t.storeId),
+    createdAt: iso(t.createdAt),
+  };
+}
+
+interface InvoiceRelations {
+  customer?: CustomerDoc | null;
+  /** نقشه‌ی productId(hex) → محصول */
+  products?: Map<string, ProductDoc>;
+}
+
+export function invoiceDTO(i: InvoiceDoc, relations: InvoiceRelations = {}): Invoice {
+  const invoiceId = idOf(i._id);
+  const items: InvoiceItem[] = (i.items ?? []).map((item) => {
+    const product = relations.products?.get(idOf(item.productId));
+    return {
+      id: idOf(item._id) || `${invoiceId}-item`,
+      invoiceId,
+      productId: idOf(item.productId),
+      product: product ? productDTO(product) : undefined,
+      qty: Number(item.qty ?? 0),
+      unitPrice: Number(item.unitPrice ?? 0),
+      total: Number(item.total ?? 0),
+    };
+  });
+
+  const payments: Payment[] = (i.payments ?? []).map((p) => ({
+    id: idOf(p._id),
+    invoiceId,
+    method: p.method,
+    amount: Number(p.amount ?? 0),
+    note: p.note ?? null,
+    createdAt: iso(p.createdAt),
+  }));
+
+  return {
+    id: invoiceId,
     number: i.number,
     status: i.status,
-    customerId: i.customerId,
-    customer: i.customer ? customerDTO(i.customer) : null,
-    items: i.items.map((item: any) => ({
-      id: item.id,
-      invoiceId: item.invoiceId,
-      productId: item.productId,
-      product: productDTO(item.product),
-      qty: item.qty,
-      unitPrice: num(item.unitPrice),
-      total: num(item.total),
-    })),
-    payments: i.payments.map((p: any) => ({
-      id: p.id,
-      invoiceId: p.invoiceId,
-      method: p.method as PaymentMethod,
-      amount: num(p.amount),
-      note: p.note,
-      createdAt: iso(p.createdAt),
-    })),
-    subtotal: num(i.subtotal),
-    discount: num(i.discount),
-    tax: num(i.tax),
-    total: num(i.total),
-    paidAmount: num(i.paidAmount),
-    note: i.note,
-    storeId: i.storeId,
-    createdById: i.createdById,
+    customerId: idOf(i.customerId) || null,
+    customer: relations.customer ? customerDTO(relations.customer) : null,
+    items,
+    payments,
+    subtotal: Number(i.subtotal ?? 0),
+    discount: Number(i.discount ?? 0),
+    tax: Number(i.tax ?? 0),
+    total: Number(i.total ?? 0),
+    paidAmount: Number(i.paidAmount ?? 0),
+    note: i.note ?? null,
+    storeId: idOf(i.storeId),
+    createdById: idOf(i.createdById),
     issuedAt: i.issuedAt ? iso(i.issuedAt) : null,
     createdAt: iso(i.createdAt),
     updatedAt: iso(i.updatedAt),
   };
 }
 
-export function expenseDTO(e: ExpensePayload): Expense {
+interface ScanRelations {
+  product?: ProductDoc | null;
+  user?: UserDoc | null;
+}
+
+export function scanEventDTO(e: ScanEventDoc, relations: ScanRelations = {}): ScanEvent {
+  const product = relations.product;
   return {
-    id: e.id,
-    title: e.title,
-    amount: num(e.amount),
-    date: iso(e.date),
-    note: e.note,
-    receiptUrl: e.receiptUrl,
-    categoryId: e.categoryId,
-    category: e.category
-      ? { id: e.category.id, name: e.category.name, storeId: e.category.storeId }
-      : null,
-    storeId: e.storeId,
-    createdById: e.createdById,
+    id: idOf(e._id),
+    productId: idOf(e.productId) || null,
+    barcode: e.barcode,
+    type: e.type,
+    qty: Number(e.qty ?? 1),
+    device: e.device ?? null,
+    note: e.note ?? null,
+    userId: idOf(e.userId) || null,
+    userName: relations.user?.name ?? relations.user?.email ?? null,
+    storeId: idOf(e.storeId),
     createdAt: iso(e.createdAt),
+    product: product
+      ? {
+          id: idOf(product._id),
+          name: product.name,
+          barcode: product.barcode,
+          salePrice: Number(product.salePrice ?? 0),
+          stock: Number(product.stock ?? 0),
+        }
+      : null,
   };
 }
 

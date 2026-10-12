@@ -1,7 +1,7 @@
 import type { NextAuthConfig } from "next-auth";
 
 /**
- * Edge-safe auth config (no Prisma / bcrypt here — those live in lib/auth.ts).
+ * Edge-safe auth config (no Mongo driver / bcrypt here — those live in lib/auth.ts).
  * The `authorized` callback runs in proxy.ts (Next.js 16 "Proxy", formerly
  * middleware) and decides which pages require a session.
  */
@@ -27,7 +27,7 @@ export const authConfig = {
       return true;
     },
   },
-  providers: [], // configured in lib/auth.ts (needs Prisma + bcrypt)
+  providers: [], // configured in lib/auth.ts (needs MongoDB + bcrypt)
 } satisfies NextAuthConfig;
 
 export default authConfig;

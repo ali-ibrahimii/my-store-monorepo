@@ -1,5 +1,6 @@
-import { prisma } from "@/lib/prisma";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { listAllProducts, listCategories } from "@/lib/repositories";
 import { ProductForm } from "@/components/product-form";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@my-store/ui-kit";
 import { formatCurrency, toPersianDigits } from "@my-store/shared-utils";
@@ -10,15 +11,12 @@ export const metadata = { title: "محصولات" };
 
 export default async function ProductsPage() {
   const session = await auth();
-  const storeId = session!.user.storeId;
+  if (!session?.user?.storeId) redirect("/login");
+  const storeId = session.user.storeId;
 
   const [products, categories] = await Promise.all([
-    prisma.product.findMany({
-      where: { storeId },
-      include: { category: true },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.category.findMany({ where: { storeId }, orderBy: { name: "asc" } }),
+    listAllProducts(storeId),
+    listCategories(storeId),
   ]);
 
   return (

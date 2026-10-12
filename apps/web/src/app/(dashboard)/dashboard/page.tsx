@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   TrendingUp,
   Wallet,
@@ -7,8 +8,9 @@ import {
   AlertTriangle,
   ScanLine,
 } from "lucide-react";
-import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { listInvoices, listProducts } from "@/lib/repositories";
+import { getSummary } from "@/lib/stats";
 import { StatCard } from "@/components/stat-card";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@my-store/ui-kit";
 import {
@@ -20,56 +22,25 @@ import {
 
 export const dynamic = "force-dynamic";
 
+export const metadata = { title: "داشبورد" };
+
 export default async function DashboardPage() {
   const session = await auth();
-  const storeId = session!.user.storeId;
+  if (!session?.user?.storeId) redirect("/login");
+  const storeId = session.user.storeId;
 
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [
-    todayInvoices,
-    monthInvoices,
-    todayExpenses,
-    monthExpenses,
-    products,
-    recentInvoices,
-    unpaidInvoices,
-  ] = await Promise.all([
-    prisma.invoice.aggregate({
-      where: { storeId, createdAt: { gte: startOfToday }, status: { not: "CANCELLED" } },
-      _sum: { total: true },
-      _count: true,
-    }),
-    prisma.invoice.aggregate({
-      where: { storeId, createdAt: { gte: startOfMonth }, status: { not: "CANCELLED" } },
-      _sum: { total: true },
-    }),
-    prisma.expense.aggregate({ where: { storeId, date: { gte: startOfToday } }, _sum: { amount: true } }),
-    prisma.expense.aggregate({ where: { storeId, date: { gte: startOfMonth } }, _sum: { amount: true } }),
-    prisma.product.findMany({
-      where: { storeId },
-      select: { id: true, name: true, stock: true, costPrice: true, lowStockThreshold: true },
-    }),
-    prisma.invoice.findMany({
-      where: { storeId },
-      include: { customer: true, items: true },
-      orderBy: { createdAt: "desc" },
-      take: 8,
-    }),
-    prisma.invoice.aggregate({
-      where: { storeId, status: { in: ["ISSUED", "PARTIAL"] } },
-      _sum: { total: true },
-    }),
+  const [summary, recentPage, lowStockPage, allProductsPage] = await Promise.all([
+    getSummary(storeId),
+    listInvoices(storeId, { page: 1, pageSize: 8 }),
+    listProducts(storeId, { lowStock: true, page: 1, pageSize: 8 }),
+    listProducts(storeId, { page: 1, pageSize: 1 }),
   ]);
 
-  const todayRevenue = Number(todayInvoices._sum.total ?? 0);
-  const monthRevenue = Number(monthInvoices._sum.total ?? 0);
-  const todayExp = Number(todayExpenses._sum.amount ?? 0);
-  const monthExp = Number(monthExpenses._sum.amount ?? 0);
-  const inventoryValue = products.reduce((s: any, p: any) => s + p.stock * Number(p.costPrice), 0);
-  const lowStock = products.filter((p: any) => p.stock <= p.lowStockThreshold);
+  const recentInvoices = recentPage.items;
+  const lowStock = lowStockPage.items;
+  const productCount = allProductsPage.total;
 
   return (
     <div className="space-y-8">
@@ -81,27 +52,27 @@ export default async function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="فروش امروز"
-          value={formatCurrency(todayRevenue)}
-          hint={`${toPersianDigits(todayInvoices._count)} فاکتور`}
+          value={formatCurrency(summary.todayRevenue)}
+          hint={`${toPersianDigits(summary.invoiceCount)} فاکتور کل`}
           icon={TrendingUp}
           tone="success"
         />
         <StatCard
           title="درآمد این ماه"
-          value={formatCurrency(monthRevenue)}
+          value={formatCurrency(summary.monthRevenue)}
           icon={Wallet}
         />
         <StatCard
           title="سود خالص امروز"
-          value={formatCurrency(todayRevenue - todayExp)}
-          hint={`هزینه امروز: ${formatCurrency(todayExp)}`}
+          value={formatCurrency(summary.netProfitToday)}
+          hint={`هزینه امروز: ${formatCurrency(summary.todayExpenses)}`}
           icon={TrendingUp}
-          tone={todayRevenue - todayExp >= 0 ? "success" : "danger"}
+          tone={summary.netProfitToday >= 0 ? "success" : "danger"}
         />
         <StatCard
           title="ارزش موجودی انبار"
-          value={formatCurrency(inventoryValue)}
-          hint={`${toPersianDigits(products.length)} قلم کالا`}
+          value={formatCurrency(summary.inventoryValue)}
+          hint={`${toPersianDigits(productCount)} قلم کالا`}
           icon={Package}
         />
       </div>
@@ -109,34 +80,34 @@ export default async function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="سود خالص این ماه"
-          value={formatCurrency(monthRevenue - monthExp)}
-          hint={`هزینه ماه: ${formatCurrency(monthExp)}`}
+          value={formatCurrency(summary.netProfitMonth)}
+          hint={`هزینه ماه: ${formatCurrency(summary.monthExpenses)}`}
           icon={TrendingUp}
-          tone={monthRevenue - monthExp >= 0 ? "success" : "danger"}
+          tone={summary.netProfitMonth >= 0 ? "success" : "danger"}
         />
         <StatCard
           title="فاکتورهای پرداخت‌نشده"
-          value={formatCurrency(Number(unpaidInvoices._sum.total ?? 0))}
+          value={formatCurrency(summary.unpaidInvoicesAmount)}
           icon={Receipt}
           tone="warning"
         />
         <StatCard
           title="کالاهای کم‌موجود"
-          value={toPersianDigits(lowStock.length)}
+          value={toPersianDigits(summary.lowStockCount)}
           hint="موجودی کمتر یا مساوی حداقل"
           icon={AlertTriangle}
-          tone={lowStock.length > 0 ? "warning" : "default"}
+          tone={summary.lowStockCount > 0 ? "warning" : "default"}
         />
         <Link href="/scan" className="block">
           <Card className="h-full border-dashed transition-colors hover:border-primary">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+              <CardTitle className="text-muted-foreground text-sm font-medium">
                 اسکن سریع
               </CardTitle>
-              <ScanLine className="h-4 w-4 text-muted-foreground" />
+              <ScanLine className="text-muted-foreground h-4 w-4" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-primary">باز کردن اسکنر</div>
+              <div className="text-primary text-2xl font-bold">باز کردن اسکنر</div>
               <p className="text-muted-foreground mt-1 text-xs">اسکن بارکد با دوربین گوشی</p>
             </CardContent>
           </Card>
@@ -148,7 +119,7 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               آخرین فاکتورها
-              <Link href="/accounting" className="text-sm text-primary underline">
+              <Link href="/accounting" className="text-primary text-sm underline">
                 همه
               </Link>
             </CardTitle>
@@ -158,8 +129,11 @@ export default async function DashboardPage() {
               <p className="text-muted-foreground text-sm">هنوز فاکتوری ثبت نشده است.</p>
             ) : (
               <ul className="space-y-3">
-                {recentInvoices.map((inv: any) => (
-                  <li key={inv.id} className="flex items-center justify-between gap-3 border-b pb-2 last:border-0">
+                {recentInvoices.map((inv) => (
+                  <li
+                    key={inv.id}
+                    className="border-b pb-2 last:border-0 flex items-center justify-between gap-3"
+                  >
                     <div className="min-w-0">
                       <div className="font-medium">{inv.number}</div>
                       <div className="text-muted-foreground text-xs">
@@ -178,7 +152,7 @@ export default async function DashboardPage() {
                       >
                         {INVOICE_STATUS_LABELS[inv.status] ?? inv.status}
                       </Badge>
-                      <span className="text-sm font-medium">{formatCurrency(Number(inv.total))}</span>
+                      <span className="text-sm font-medium">{formatCurrency(inv.total)}</span>
                     </div>
                   </li>
                 ))}
@@ -191,7 +165,7 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               کالاهای کم‌موجود
-              <Link href="/products" className="text-sm text-primary underline">
+              <Link href="/products" className="text-primary text-sm underline">
                 همه
               </Link>
             </CardTitle>
@@ -201,8 +175,11 @@ export default async function DashboardPage() {
               <p className="text-muted-foreground text-sm">همه کالاها موجودی کافی دارند. ✅</p>
             ) : (
               <ul className="space-y-3">
-                {lowStock.slice(0, 8).map((p: any) => (
-                  <li key={p.id} className="flex items-center justify-between gap-3 border-b pb-2 last:border-0">
+                {lowStock.map((p) => (
+                  <li
+                    key={p.id}
+                    className="border-b pb-2 last:border-0 flex items-center justify-between gap-3"
+                  >
                     <span className="truncate text-sm">{p.name}</span>
                     <Badge variant="warning">
                       {toPersianDigits(p.stock)} / {toPersianDigits(p.lowStockThreshold)}

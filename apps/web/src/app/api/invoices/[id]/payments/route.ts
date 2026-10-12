@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
-import { invoiceDTO } from "@/lib/serialize";
-import { postPaymentLedger } from "@/lib/ledger";
 import { z } from "zod";
+import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
+import { addPayment } from "@/lib/invoice-service";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +13,7 @@ const paymentSchema = z.object({
   note: z.string().trim().optional().or(z.literal("")),
 });
 
-/** POST /api/invoices/:id/payments — record a payment against an invoice */
+/** POST /api/invoices/:id/payments — ثبت پرداخت روی فاکتور */
 export async function POST(request: Request, context: RouteContext) {
   try {
     const { user, response } = await requireStoreUser();
@@ -31,53 +29,17 @@ export async function POST(request: Request, context: RouteContext) {
       );
     }
 
-    const updated = await prisma.$transaction(async (tx: any) => {
-      const invoice = await tx.invoice.findFirst({
-        where: { id, storeId: user.storeId },
-      });
-      if (!invoice) throw new Error("فاکتور یافت نشد");
+    const invoice = await addPayment(
+      id,
+      {
+        method: parsed.data.method,
+        amount: parsed.data.amount,
+        note: parsed.data.note || null,
+      },
+      user,
+    );
 
-      const remaining = Number(invoice.total) - Number(invoice.paidAmount);
-      if (parsed.data.amount > remaining + 0.01) {
-        throw new Error(`مبلغ پرداخت بیشتر از بدهی باقیمانده است (باقیمانده: ${remaining})`);
-      }
-
-      await tx.payment.create({
-        data: {
-          invoiceId: id,
-          method: parsed.data.method,
-          amount: parsed.data.amount,
-          note: parsed.data.note || null,
-        },
-      });
-
-      const paidAmount = Number(invoice.paidAmount) + parsed.data.amount;
-      const total = Number(invoice.total);
-      const status = paidAmount >= total ? "PAID" : "PARTIAL";
-
-      const result = await tx.invoice.update({
-        where: { id },
-        data: { paidAmount, status: status as never },
-        include: {
-          items: { include: { product: true } },
-          customer: true,
-          payments: true,
-        },
-      });
-
-      await postPaymentLedger(tx, user.storeId, id, parsed.data.amount, "پرداخت فاکتور");
-
-      if (invoice.customerId) {
-        await tx.customer.update({
-          where: { id: invoice.customerId },
-          data: { balance: { decrement: parsed.data.amount } },
-        });
-      }
-
-      return result;
-    });
-
-    return NextResponse.json(invoiceDTO(updated), { status: 201 });
+    return NextResponse.json(invoice, { status: 201 });
   } catch (error) {
     return handleRouteError(error);
   }

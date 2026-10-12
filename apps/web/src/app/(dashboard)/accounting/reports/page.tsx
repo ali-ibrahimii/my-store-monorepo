@@ -1,5 +1,6 @@
-import { prisma } from "@/lib/prisma";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { getDailySales, getInventoryValue, getLedgerBreakdown } from "@/lib/stats";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@my-store/ui-kit";
 import {
@@ -20,7 +21,8 @@ type PageProps = {
 
 export default async function ReportsPage({ searchParams }: PageProps) {
   const session = await auth();
-  const storeId = session!.user.storeId;
+  if (!session?.user?.storeId) redirect("/login");
+  const storeId = session.user.storeId;
   const params = await searchParams;
 
   const now = new Date();
@@ -28,48 +30,21 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   const fromDate = params.from ? new Date(params.from) : defaultFrom;
   const toDate = params.to ? new Date(params.to + "T23:59:59.999Z") : now;
 
-  const [transactions, invoices, products] = await Promise.all([
-    prisma.transaction.findMany({
-      where: { storeId, date: { gte: fromDate, lte: toDate } },
-    }),
-    prisma.invoice.findMany({
-      where: {
-        storeId,
-        createdAt: { gte: fromDate, lte: toDate },
-        status: { not: "CANCELLED" },
-      },
-      select: { createdAt: true, total: true },
-    }),
-    prisma.product.findMany({
-      where: { storeId },
-      select: { stock: true, costPrice: true },
-    }),
+  const [byAccount, dailyPoints, inventoryValue] = await Promise.all([
+    getLedgerBreakdown(storeId, fromDate, toDate),
+    getDailySales(storeId, fromDate, toDate),
+    getInventoryValue(storeId),
   ]);
 
-  const byAccount = new Map<string, { debit: number; credit: number }>();
-  for (const t of transactions) {
-    const entry = byAccount.get(t.account) ?? { debit: 0, credit: 0 };
-    if (t.type === "DEBIT") entry.debit += Number(t.amount);
-    else entry.credit += Number(t.amount);
-    byAccount.set(t.account, entry);
-  }
   const sum = (account: string) => byAccount.get(account) ?? { debit: 0, credit: 0 };
-
   const revenue = sum("SALES_REVENUE").credit - sum("SALES_REVENUE").debit;
   const cogs = sum("COGS").debit - sum("COGS").credit;
   const expenses = sum("EXPENSE").debit - sum("EXPENSE").credit;
   const grossProfit = revenue - cogs;
   const netProfit = grossProfit - expenses;
-  const inventoryValue = products.reduce((s: any, p: any) => s + p.stock * Number(p.costPrice), 0);
 
-  // Daily sales series for the bar chart
-  const byDay = new Map<string, number>();
-  for (const inv of invoices) {
-    const day = inv.createdAt.toISOString().slice(0, 10);
-    byDay.set(day, (byDay.get(day) ?? 0) + Number(inv.total));
-  }
-  const points = [...byDay.entries()].sort((a: any, b: any) => a[0].localeCompare(b[0]));
-  const maxRevenue = Math.max(1, ...points.map((p: any) => p[1]));
+  const points: [string, number][] = dailyPoints.map((p) => [p.date, p.revenue]);
+  const maxRevenue = Math.max(1, ...points.map((p) => p[1]));
 
   return (
     <div className="space-y-8">

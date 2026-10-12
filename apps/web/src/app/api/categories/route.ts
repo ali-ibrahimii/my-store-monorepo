@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { ObjectId } from "mongodb";
+import { collections } from "@/lib/db";
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
+import { listCategories } from "@/lib/repositories";
 import { categoryDTO } from "@/lib/serialize";
-import { categorySchema } from "@my-store/shared-utils";
+import { categorySchema, slugify } from "@my-store/shared-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -11,12 +13,7 @@ export async function GET() {
   try {
     const { user, response } = await requireStoreUser();
     if (!user) return response;
-
-    const categories = await prisma.category.findMany({
-      where: { storeId: user.storeId },
-      orderBy: { name: "asc" },
-    });
-    return NextResponse.json(categories.map(categoryDTO));
+    return NextResponse.json(await listCategories(user.storeId));
   } catch (error) {
     return handleRouteError(error);
   }
@@ -37,19 +34,28 @@ export async function POST(request: Request) {
       );
     }
 
-    const slug =
-      parsed.data.slug ||
-      parsed.data.name
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, "-")
-        .replace(/[^a-z0-9-]/g, "")
-        .slice(0, 40);
+    const slug = parsed.data.slug || slugify(parsed.data.name, "category");
 
-    const category = await prisma.category.create({
-      data: { storeId: user.storeId, name: parsed.data.name, slug },
+    const { categories } = await collections();
+
+    const exists = await categories.findOne({ storeId: user.storeId, slug });
+    if (exists) {
+      return NextResponse.json({ error: "دسته‌ای با این اسلاگ قبلاً ثبت شده است" }, { status: 409 });
+    }
+
+    const now = new Date();
+    const _id = new ObjectId();
+    await categories.insertOne({
+      _id,
+      storeId: user.storeId,
+      name: parsed.data.name,
+      slug,
+      createdAt: now,
+      updatedAt: now,
     });
-    return NextResponse.json(categoryDTO(category), { status: 201 });
+
+    const doc = await categories.findOne({ _id });
+    return NextResponse.json(categoryDTO(doc!), { status: 201 });
   } catch (error) {
     return handleRouteError(error);
   }

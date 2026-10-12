@@ -1,5 +1,7 @@
-import { prisma } from "@/lib/prisma";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { listAllProducts, listCustomers, listInvoices } from "@/lib/repositories";
 import { InvoiceForm } from "@/components/invoice-form";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@my-store/ui-kit";
 import {
@@ -14,26 +16,15 @@ export const metadata = { title: "فاکتورها" };
 
 export default async function InvoicesPage() {
   const session = await auth();
-  const storeId = session!.user.storeId;
+  if (!session?.user?.storeId) redirect("/login");
+  const storeId = session.user.storeId;
 
-  const [invoices, products, customers] = await Promise.all([
-    prisma.invoice.findMany({
-      where: { storeId },
-      include: { customer: true, items: { include: { product: true } }, payments: true },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    }),
-    prisma.product.findMany({
-      where: { storeId },
-      select: { id: true, name: true, salePrice: true, stock: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.customer.findMany({
-      where: { storeId },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
+  const [invoicePage, products, customers] = await Promise.all([
+    listInvoices(storeId, { page: 1, pageSize: 50 }),
+    listAllProducts(storeId),
+    listCustomers(storeId),
   ]);
+  const invoices = invoicePage.items;
 
   return (
     <div className="space-y-8">
@@ -66,7 +57,11 @@ export default async function InvoicesPage() {
                   <tbody>
                     {invoices.map((inv: any) => (
                       <tr key={inv.id} className="border-b last:border-0">
-                        <td className="p-2 font-medium" dir="ltr">{inv.number}</td>
+                        <td className="p-2 font-medium" dir="ltr">
+                          <Link href={`/accounting/invoices/${inv.id}`} className="text-primary underline">
+                            {inv.number}
+                          </Link>
+                        </td>
                         <td className="p-2">{inv.customer?.name ?? "حضوری"}</td>
                         <td className="p-2 text-muted-foreground">{formatDateJalali(inv.createdAt)}</td>
                         <td className="p-2">{formatCurrency(Number(inv.total))}</td>

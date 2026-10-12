@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { ObjectId } from "mongodb";
+import { collections, idOf, idOrEmpty } from "@/lib/db";
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
-import { pageDTO, productDTO } from "@/lib/serialize";
+import { listProducts, mapCategories } from "@/lib/repositories";
+import { productDTO } from "@/lib/serialize";
 import { productSchema, normalizeBarcode } from "@my-store/shared-utils";
 
 export const dynamic = "force-dynamic";
@@ -13,45 +15,15 @@ export async function GET(request: Request) {
     if (!user) return response;
 
     const { searchParams } = new URL(request.url);
-    const search = searchParams.get("search")?.trim() || undefined;
-    const categoryId = searchParams.get("categoryId") || undefined;
-    const lowStock = searchParams.get("lowStock") === "1";
-    const page = Math.max(1, Number(searchParams.get("page")) || 1);
-    const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("pageSize")) || 20));
+    const page = await listProducts(user.storeId, {
+      search: searchParams.get("search")?.trim() || undefined,
+      categoryId: searchParams.get("categoryId") || undefined,
+      lowStock: searchParams.get("lowStock") === "1",
+      page: Number(searchParams.get("page")) || 1,
+      pageSize: Number(searchParams.get("pageSize")) || 20,
+    });
 
-    const where = {
-      storeId: user.storeId,
-      ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: "insensitive" as const } },
-              { barcode: { contains: search, mode: "insensitive" as const } },
-              { sku: { contains: search, mode: "insensitive" as const } },
-            ],
-          }
-        : {}),
-      ...(categoryId ? { categoryId } : {}),
-    };
-
-    const [total, items] = await Promise.all([
-      prisma.product.count({ where }),
-      prisma.product.findMany({
-        where,
-        include: { category: true },
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-    ]);
-
-    // lowStock filter needs a per-row comparison — apply post-query when requested
-    const filtered = lowStock
-      ? items.filter((p: any) => p.stock <= p.lowStockThreshold)
-      : items;
-
-    return NextResponse.json(
-      pageDTO(filtered.map(productDTO), lowStock ? filtered.length : total, page, pageSize),
-    );
+    return NextResponse.json(page);
   } catch (error) {
     return handleRouteError(error);
   }
@@ -73,10 +45,10 @@ export async function POST(request: Request) {
     }
     const data = parsed.data;
 
+    const { products } = await collections();
     const barcode = normalizeBarcode(data.barcode);
-    const exists = await prisma.product.findUnique({
-      where: { storeId_barcode: { storeId: user.storeId, barcode } },
-    });
+
+    const exists = await products.findOne({ storeId: user.storeId, barcode });
     if (exists) {
       return NextResponse.json(
         { error: "محصولی با این بارکد قبلاً ثبت شده است" },
@@ -84,23 +56,29 @@ export async function POST(request: Request) {
       );
     }
 
-    const product = await prisma.product.create({
-      data: {
-        storeId: user.storeId,
-        name: data.name,
-        barcode,
-        sku: data.sku || null,
-        description: data.description || null,
-        costPrice: data.costPrice,
-        salePrice: data.salePrice,
-        stock: data.stock ?? 0,
-        lowStockThreshold: data.lowStockThreshold ?? 5,
-        categoryId: data.categoryId || null,
-      },
-      include: { category: true },
+    const now = new Date();
+    const _id = new ObjectId();
+    const categoryId = idOrEmpty(data.categoryId) || null;
+
+    await products.insertOne({
+      _id,
+      storeId: user.storeId,
+      name: data.name,
+      barcode,
+      sku: data.sku || null,
+      description: data.description || null,
+      costPrice: Number(data.costPrice ?? 0),
+      salePrice: Number(data.salePrice ?? 0),
+      stock: Number(data.stock ?? 0),
+      lowStockThreshold: Number(data.lowStockThreshold ?? 5),
+      categoryId,
+      createdAt: now,
+      updatedAt: now,
     });
 
-    return NextResponse.json(productDTO(product), { status: 201 });
+    const doc = await products.findOne({ _id });
+    const cats = await mapCategories(user.storeId, [categoryId]);
+    return NextResponse.json(productDTO(doc!, cats.get(idOf(categoryId))), { status: 201 });
   } catch (error) {
     return handleRouteError(error);
   }

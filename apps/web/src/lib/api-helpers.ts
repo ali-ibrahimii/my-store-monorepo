@@ -40,7 +40,7 @@ export async function requireStoreUser(minRole?: Role) {
   if (minRole && !hasRole(user.role, minRole)) {
     return {
       user: null,
-      response: jsonError(403, "شما اجازه انجام این操作 را ندارید"),
+      response: jsonError(403, "شما اجازه انجام این کار را ندارید"),
     } as const;
   }
 

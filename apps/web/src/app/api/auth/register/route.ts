@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
-import { registerSchema } from "@my-store/shared-utils";
+import { collections } from "@/lib/db";
+import { registerSchema, slugify } from "@my-store/shared-utils";
 import { handleRouteError } from "@/lib/api-helpers";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Register a new store + owner user (multi-tenant ready).
+ * ثبت یک فروشگاه جدید + کاربر مالک (multi-tenant).
  * POST /api/auth/register { storeName, name, email, password }
  */
 export async function POST(request: Request) {
@@ -21,42 +22,55 @@ export async function POST(request: Request) {
       );
     }
     const { storeName, name, email, password } = parsed.data;
+    const normalizedEmail = email.toLowerCase().trim();
 
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const { stores, users } = await collections();
+
+    const existing = await users.findOne({ email: normalizedEmail });
     if (existing) {
       return NextResponse.json({ error: "این ایمیل قبلاً ثبت شده است" }, { status: 409 });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const slug =
-      storeName
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, "-")
-        .replace(/[^a-z0-9-]/g, "")
-        .slice(0, 40) || `store-${Date.now()}`;
 
-    const store = await prisma.store.create({
-      data: {
-        name: storeName,
-        slug,
-        users: {
-          create: {
-            name,
-            email,
-            passwordHash,
-            role: "OWNER",
-          },
-        },
-      },
-      include: { users: true },
+    const baseSlug = slugify(storeName, "store");
+
+    // slug باید یکتا باشد؛ در صورت تکرار یک پسوند عددی اضافه می‌کنیم
+    let slug = baseSlug;
+    for (let i = 2; await stores.findOne({ slug }); i++) {
+      slug = `${baseSlug}-${i}`;
+    }
+
+    const now = new Date();
+    const storeId = new ObjectId();
+    const userId = new ObjectId();
+
+    await stores.insertOne({
+      _id: storeId,
+      name: storeName,
+      slug,
+      currency: "IRR",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await users.insertOne({
+      _id: userId,
+      name,
+      email: normalizedEmail,
+      emailVerified: null,
+      passwordHash,
+      role: "OWNER",
+      storeId: storeId.toHexString(),
+      createdAt: now,
+      updatedAt: now,
     });
 
     return NextResponse.json(
       {
         ok: true,
-        storeId: store.id,
-        user: { id: store.users[0].id, email: store.users[0].email },
+        storeId: storeId.toHexString(),
+        user: { id: userId.toHexString(), email: normalizedEmail },
       },
       { status: 201 },
     );

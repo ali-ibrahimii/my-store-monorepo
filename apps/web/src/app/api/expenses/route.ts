@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { ObjectId } from "mongodb";
+import { collections, idOf, idOrEmpty, oid, runInTransaction } from "@/lib/db";
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
-import { expenseDTO, pageDTO } from "@/lib/serialize";
+import { listExpenses } from "@/lib/repositories";
+import { expenseDTO } from "@/lib/serialize";
 import { expenseSchema } from "@my-store/shared-utils";
 import { postExpenseLedger } from "@/lib/ledger";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/expenses?from=&to=&page=&pageSize= (YYYY-MM-DD dates) */
+/** GET /api/expenses?from=&to=&page=&pageSize= (تاریخ‌ها YYYY-MM-DD) */
 export async function GET(request: Request) {
   try {
     const { user, response } = await requireStoreUser();
@@ -16,39 +18,21 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const from = searchParams.get("from");
     const to = searchParams.get("to");
-    const page = Math.max(1, Number(searchParams.get("page")) || 1);
-    const pageSize = Math.min(100, Math.max(1, Number(searchParams.get("pageSize")) || 20));
 
-    const where = {
-      storeId: user.storeId,
-      ...(from || to
-        ? {
-            date: {
-              ...(from ? { gte: new Date(from) } : {}),
-              ...(to ? { lte: new Date(to + "T23:59:59.999Z") } : {}),
-            },
-          }
-        : {}),
-    };
+    const page = await listExpenses(user.storeId, {
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to + "T23:59:59.999Z") : undefined,
+      page: Number(searchParams.get("page")) || 1,
+      pageSize: Number(searchParams.get("pageSize")) || 20,
+    });
 
-    const [total, items] = await Promise.all([
-      prisma.expense.count({ where }),
-      prisma.expense.findMany({
-        where,
-        include: { category: true },
-        orderBy: { date: "desc" },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-    ]);
-
-    return NextResponse.json(pageDTO(items.map(expenseDTO), total, page, pageSize));
+    return NextResponse.json(page);
   } catch (error) {
     return handleRouteError(error);
   }
 }
 
-/** POST /api/expenses — record an expense + ledger entry */
+/** POST /api/expenses — ثبت هزینه + سند دفتر کل */
 export async function POST(request: Request) {
   try {
     const { user, response } = await requireStoreUser();
@@ -64,25 +48,37 @@ export async function POST(request: Request) {
     }
     const data = parsed.data;
 
-    const expense = await prisma.$transaction(async (tx: any) => {
-      const created = await tx.expense.create({
-        data: {
+    const expense = await runInTransaction(async (session) => {
+      const { expenses, expenseCategories } = await collections();
+
+      const _id = new ObjectId();
+      const now = new Date();
+      await expenses.insertOne(
+        {
+          _id,
           storeId: user.storeId,
           title: data.title,
-          amount: data.amount,
-          date: data.date ? new Date(data.date) : new Date(),
+          amount: Number(data.amount),
+          date: data.date ? new Date(data.date) : now,
           note: data.note || null,
-          categoryId: data.categoryId || null,
+          receiptUrl: null,
+          categoryId: idOrEmpty(data.categoryId) || null,
           createdById: user.id,
+          createdAt: now,
         },
-        include: { category: true },
-      });
+        { session },
+      );
 
-      await postExpenseLedger(tx, user.storeId, created.id, data.amount, data.title);
-      return created;
+      await postExpenseLedger(user.storeId, idOf(_id), Number(data.amount), data.title, session);
+
+      const doc = await expenses.findOne({ _id }, { session });
+      const category = doc?.categoryId
+        ? await expenseCategories.findOne({ _id: oid(doc.categoryId) }, { session })
+        : null;
+      return expenseDTO(doc!, category);
     });
 
-    return NextResponse.json(expenseDTO(expense), { status: 201 });
+    return NextResponse.json(expense, { status: 201 });
   } catch (error) {
     return handleRouteError(error);
   }

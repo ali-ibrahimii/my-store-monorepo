@@ -3,8 +3,8 @@ import authConfig from "@/auth.config";
 
 /**
  * Next.js 16 "Proxy" (formerly middleware).
- * Keep this on the JWT-only config so it does not load the Prisma adapter;
- * database-backed auth is initialized in lib/auth.ts for server routes.
+ * Runs on the Edge runtime, so it only verifies the JWT via auth.config.ts.
+ * MongoDB-backed helpers (roles, store data) live in lib/auth.ts.
  */
 const { auth } = NextAuth(authConfig);
 
