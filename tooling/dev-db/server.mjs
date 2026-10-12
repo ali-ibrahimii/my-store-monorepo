@@ -15,21 +15,22 @@
 //   - ایندکس unique را «اجرا» نمی‌کند (فقط می‌سازد)؛ بررسی
 //     تکراری‌بودن در کد برنامه هم انجام می‌شود
 //
-// اجرا:  pnpm db:sandbox
+// اجرا:   pnpm db:sandbox
+// پورت:   MONGO_PORT (پیش‌فرض 27017)
+// آدرس:   MONGO_HOST (پیش‌فرض 127.0.0.1 — برای دسترسی از بیرون:
+//                     `MONGO_HOST=0.0.0.0 pnpm db:sandbox`)
+//
+// نکته: `pnpm dev` خودش اگر دیتابیس بالا نباشد این سرور را
+// به‌صورت خودکار (به‌عنوان پروسه‌ی فرزند) اجرا می‌کند.
 // ============================================================
 
-import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
+import { DEFAULT_PORT, resolveSandboxBinary, spawnSandboxServer } from "./ensure.mjs";
 
-const require = createRequire(import.meta.url);
+const host = process.env.MONGO_HOST ?? "127.0.0.1";
+const port = process.env.MONGO_PORT ?? String(DEFAULT_PORT);
 
-const host = process.env.MONGO_HOST ?? "0.0.0.0";
-const port = process.env.MONGO_PORT ?? "27017";
-
-let binPath;
 try {
-  const pkg = require.resolve("@rckflr/easydb-server/package.json");
-  binPath = new URL("./bin/easydb-server.js", `file://${pkg}`).pathname;
+  resolveSandboxBinary();
 } catch {
   console.error(
     "[dev-db] پکیج @rckflr/easydb-server نصب نیست.\n" +
@@ -40,13 +41,10 @@ try {
 }
 
 console.log(`[dev-db] سرور سازگار با MongoDB روی ${host}:${port} در حال شروع است…`);
-console.log("[dev-db] رشته‌ی اتصال: mongodb://127.0.0.1:" + port + "/mystore?directConnection=true");
+console.log(`[dev-db] رشته‌ی اتصال: mongodb://127.0.0.1:${port}/mystore?directConnection=true`);
 console.log("[dev-db] داده‌ها در حافظه‌اند — برای داده‌ی نمونه: pnpm db:seed");
 
-const child = spawn(process.execPath, [binPath, "--host", host, "--port", port, "--adapter", "memory"], {
-  stdio: "inherit",
-  env: process.env,
-});
+const child = spawnSandboxServer({ host, port });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {

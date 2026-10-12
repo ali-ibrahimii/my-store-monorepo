@@ -11,6 +11,7 @@
     "clean": "turbo run clean && rm -rf node_modules",
     "db:seed": "pnpm --filter web db:seed",
     "db:reset": "pnpm --filter web db:seed -- --fresh",
+    "db:ensure": "pnpm --filter web db:ensure",
     "db:sandbox": "pnpm --filter @my-store/dev-db start",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",

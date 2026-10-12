@@ -85,9 +85,49 @@ function buildClient(): MongoClient {
 
 export function getClient(): Promise<MongoClient> {
   if (!g.__mongoClientPromise) {
-    g.__mongoClientPromise = buildClient().connect();
+    // اگر اتصال شکست خورد، Promiseِ خطا را کش نکن؛ وگرنه بعد از
+    // بالا آمدن دیتابیس هم برنامه تا ری‌استارت بعدی «قطع» می‌ماند.
+    g.__mongoClientPromise = buildClient()
+      .connect()
+      .catch((error) => {
+        g.__mongoClientPromise = undefined;
+        throw error;
+      });
   }
   return g.__mongoClientPromise;
+}
+
+/**
+ * یک ping سریع به دیتابیس — برای /api/health و پیام‌های راهنمای خطا.
+ *
+ * - اتصال خراب را کش نمی‌کند (درخواست بعدی دوباره تلاش می‌کند)
+ * - با تایم‌اوت کوتاه، تا وقتی سرور Mongo بالا نیست صفحه‌ها معطل نمانند.
+ *   (serverSelectionTimeoutMS پیش‌فرض ۱۰ ثانیه است؛ اینجا زودتر تسلیم می‌شویم)
+ */
+export async function pingDatabase(
+  timeoutMs = 3000,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const probe = (async () => {
+      const client = await getClient();
+      await client.db(mongoDbName()).command({ ping: 1 });
+    })();
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`پاسخی از دیتابیس نیامد (بیش از ${timeoutMs} میلی‌ثانیه)`)),
+        timeoutMs,
+      );
+    });
+    await Promise.race([probe, timeout]);
+    return { ok: true };
+  } catch (error) {
+    g.__mongoClientPromise = undefined;
+    g.__mongoCollections = undefined;
+    return { ok: false, error: (error as Error)?.message ?? String(error) };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export async function getDb(): Promise<Db> {
@@ -98,7 +138,11 @@ export async function getDb(): Promise<Db> {
 /** کالکشن‌های تایپ‌شده — اولین فراخوانی ایندکس‌ها را هم می‌سازد. */
 export function collections(): Promise<Collections> {
   if (!g.__mongoCollections) {
-    g.__mongoCollections = initCollections();
+    // مثل getClient: خطا کش نمی‌شود تا ارتباط بعد از بالا آمدن دیتابیس برگردد.
+    g.__mongoCollections = initCollections().catch((error) => {
+      g.__mongoCollections = undefined;
+      throw error;
+    });
   }
   return g.__mongoCollections;
 }

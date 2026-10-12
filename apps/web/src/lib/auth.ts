@@ -12,20 +12,17 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import authConfig from "@/auth.config";
 import { collections, idOf } from "@/lib/db";
-
-/** فقط برای توسعه — در production حتماً باید AUTH_SECRET تنظیم شود. */
-const DEV_FALLBACK_SECRET = "my-store-dev-secret-change-me-in-production";
-
-function resolveSecret(): string | undefined {
-  const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
-  if (secret) return secret;
-  if (process.env.NODE_ENV !== "production") return DEV_FALLBACK_SECRET;
-  return undefined;
-}
+import { resolveAuthSecret } from "@/lib/auth-secret";
+import {
+  AuthServerError,
+  DatabaseUnavailableError,
+  isDatabaseConnectionError,
+} from "@/lib/auth-errors";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
-  secret: resolveSecret(),
+  // همان رازی که proxy.ts استفاده می‌کند (وگرنه نشست در Proxy خوانده نمی‌شود)
+  secret: resolveAuthSecret(),
   // اپلیکیشن پشت پروکسی/دامنه‌های مختلف (مثل پیش‌نمایش) هم باید کار کند
   trustHost: true,
   session: { strategy: "jwt" },
@@ -43,25 +40,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const password = String(credentials?.password ?? "");
         if (!email || !password) return null;
 
+        let user;
         try {
           const { users } = await collections();
-          const user = await users.findOne({ email });
-          if (!user?.passwordHash) return null;
+          user = await users.findOne({ email });
+        } catch (error) {
+          // ⚠️ خطای دیتابیس ≠ رمز اشتباه؛ کد جداگانه برمی‌گردانیم تا
+          // صفحه‌ی ورود پیام درست («دیتابیس در دسترس نیست») نشان دهد.
+          console.error("[auth] db error:", (error as Error)?.message ?? error);
+          throw isDatabaseConnectionError(error) ? new DatabaseUnavailableError() : new AuthServerError();
+        }
 
+        if (!user?.passwordHash) return null;
+
+        try {
           const ok = await bcrypt.compare(password, user.passwordHash);
           if (!ok) return null;
-
-          return {
-            id: idOf(user._id),
-            email: user.email,
-            name: user.name,
-            role: user.role,
-            storeId: idOf(user.storeId),
-          };
         } catch (error) {
-          console.error("[auth] authorize failed:", (error as Error)?.message ?? error);
-          return null;
+          console.error("[auth] password check failed:", (error as Error)?.message ?? error);
+          throw new AuthServerError();
         }
+
+        return {
+          id: idOf(user._id),
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          storeId: idOf(user.storeId),
+        };
       },
     }),
   ],

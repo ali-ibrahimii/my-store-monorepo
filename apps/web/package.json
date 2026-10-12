@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node scripts/seed.mjs --optional && next dev",
+    "dev": "node scripts/dev.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "type-check": "tsc --noEmit",
-    "db:seed": "node scripts/seed.mjs"
+    "db:seed": "node scripts/seed.mjs",
+    "dev:next": "next dev",
+    "db:ensure": "node scripts/dev.mjs --ensure-only"
   },
   "dependencies": {
     "@my-store/api-client": "workspace:^",
@@ -40,6 +42,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@my-store/dev-db": "workspace:*",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^20",
