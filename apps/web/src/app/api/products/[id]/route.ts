@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { collections, idOf, idOrEmpty, oid } from "@/lib/db";
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
+import { mapCategories } from "@/lib/repositories";
 import { productDTO } from "@/lib/serialize";
 import { productSchema, normalizeBarcode } from "@my-store/shared-utils";
 
@@ -15,14 +16,13 @@ export async function GET(_request: Request, context: RouteContext) {
     if (!user) return response;
     const { id } = await context.params;
 
-    const product = await prisma.product.findFirst({
-      where: { id, storeId: user.storeId },
-      include: { category: true },
-    });
+    const { products } = await collections();
+    const product = await products.findOne({ _id: oid(id), storeId: user.storeId });
     if (!product) {
       return NextResponse.json({ error: "محصول یافت نشد" }, { status: 404 });
     }
-    return NextResponse.json(productDTO(product));
+    const cats = await mapCategories(user.storeId, [product.categoryId]);
+    return NextResponse.json(productDTO(product, cats.get(idOf(product.categoryId))));
   } catch (error) {
     return handleRouteError(error);
   }
@@ -35,9 +35,10 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!user) return response;
     const { id } = await context.params;
 
-    const existing = await prisma.product.findFirst({
-      where: { id, storeId: user.storeId },
-    });
+    const { products } = await collections();
+    const productOid = oid(id);
+
+    const existing = await products.findOne({ _id: productOid, storeId: user.storeId });
     if (!existing) {
       return NextResponse.json({ error: "محصول یافت نشد" }, { status: 404 });
     }
@@ -52,39 +53,35 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
     const data = parsed.data;
 
-    let barcode = existing.barcode;
-    if (data.barcode) {
-      barcode = normalizeBarcode(data.barcode);
-      const clash = await prisma.product.findUnique({
-        where: { storeId_barcode: { storeId: user.storeId, barcode } },
-      });
-      if (clash && clash.id !== id) {
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    if (data.name !== undefined) update.name = data.name;
+    if (data.sku !== undefined) update.sku = data.sku || null;
+    if (data.description !== undefined) update.description = data.description || null;
+    if (data.costPrice !== undefined) update.costPrice = Number(data.costPrice);
+    if (data.salePrice !== undefined) update.salePrice = Number(data.salePrice);
+    if (data.stock !== undefined) update.stock = Number(data.stock);
+    if (data.lowStockThreshold !== undefined) {
+      update.lowStockThreshold = Number(data.lowStockThreshold);
+    }
+    if (data.categoryId !== undefined) update.categoryId = idOrEmpty(data.categoryId) || null;
+
+    if (data.barcode !== undefined) {
+      const barcode = normalizeBarcode(data.barcode);
+      const clash = await products.findOne({ storeId: user.storeId, barcode });
+      if (clash && idOf(clash._id) !== id) {
         return NextResponse.json(
           { error: "محصولی با این بارکد قبلاً ثبت شده است" },
           { status: 409 },
         );
       }
+      update.barcode = barcode;
     }
 
-    const product = await prisma.product.update({
-      where: { id },
-      data: {
-        ...(data.name !== undefined ? { name: data.name } : {}),
-        ...(data.barcode !== undefined ? { barcode } : {}),
-        ...(data.sku !== undefined ? { sku: data.sku || null } : {}),
-        ...(data.description !== undefined ? { description: data.description || null } : {}),
-        ...(data.costPrice !== undefined ? { costPrice: data.costPrice } : {}),
-        ...(data.salePrice !== undefined ? { salePrice: data.salePrice } : {}),
-        ...(data.stock !== undefined ? { stock: data.stock } : {}),
-        ...(data.lowStockThreshold !== undefined
-          ? { lowStockThreshold: data.lowStockThreshold }
-          : {}),
-        ...(data.categoryId !== undefined ? { categoryId: data.categoryId || null } : {}),
-      },
-      include: { category: true },
-    });
+    await products.updateOne({ _id: productOid }, { $set: update });
 
-    return NextResponse.json(productDTO(product));
+    const updated = await products.findOne({ _id: productOid });
+    const cats = await mapCategories(user.storeId, [updated?.categoryId]);
+    return NextResponse.json(productDTO(updated!, cats.get(idOf(updated?.categoryId))));
   } catch (error) {
     return handleRouteError(error);
   }
@@ -97,14 +94,11 @@ export async function DELETE(_request: Request, context: RouteContext) {
     if (!user) return response;
     const { id } = await context.params;
 
-    const existing = await prisma.product.findFirst({
-      where: { id, storeId: user.storeId },
-    });
-    if (!existing) {
+    const { products } = await collections();
+    const deleted = await products.deleteOne({ _id: oid(id), storeId: user.storeId });
+    if (!deleted.deletedCount) {
       return NextResponse.json({ error: "محصول یافت نشد" }, { status: 404 });
     }
-
-    await prisma.product.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return handleRouteError(error);

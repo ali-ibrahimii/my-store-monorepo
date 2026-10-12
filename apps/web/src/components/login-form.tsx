@@ -33,7 +33,13 @@ export function LoginForm() {
       setError("ایمیل یا رمز عبور اشتباه است");
       return;
     }
-    router.push("/dashboard");
+    // احترام به callbackUrl (فقط مسیرهای داخلی مجاز هستند)
+    const callbackUrl = searchParams.get("callbackUrl");
+    const safeTarget =
+      callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")
+        ? callbackUrl
+        : "/dashboard";
+    router.push(safeTarget);
     router.refresh();
   }
 

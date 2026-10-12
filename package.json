@@ -9,14 +9,12 @@
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
     "clean": "turbo run clean && rm -rf node_modules",
-    "db:generate": "pnpm --filter web db:generate",
-    "db:push": "pnpm --filter web prisma db push",
-    "db:migrate": "pnpm --filter web prisma migrate dev",
-    "db:studio": "pnpm --filter web prisma studio",
-    "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down",
-    "db:seed": "pnpm --filter web exec node prisma/seed.mjs",
-    "db:sandbox": "pnpm --filter @my-store/dev-db start"
+    "db:seed": "pnpm --filter web db:seed",
+    "db:reset": "pnpm --filter web db:seed -- --fresh",
+    "db:sandbox": "pnpm --filter @my-store/dev-db start",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f mongo"
   },
   "devDependencies": {
     "prettier": "^3.2.0",
@@ -26,5 +24,10 @@
   "engines": {
     "node": ">=18",
     "pnpm": ">=9"
+  },
+  "pnpm": {
+    "neverBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }

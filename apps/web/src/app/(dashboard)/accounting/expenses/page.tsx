@@ -1,5 +1,7 @@
-import { prisma } from "@/lib/prisma";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { listAllExpenses, listExpenseCategories } from "@/lib/repositories";
+import { sumAllExpenses } from "@/lib/stats";
 import { ExpenseForm } from "@/components/expense-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@my-store/ui-kit";
 import { formatCurrency, formatDateJalali } from "@my-store/shared-utils";
@@ -10,17 +12,13 @@ export const metadata = { title: "هزینه‌ها" };
 
 export default async function ExpensesPage() {
   const session = await auth();
-  const storeId = session!.user.storeId;
+  if (!session?.user?.storeId) redirect("/login");
+  const storeId = session.user.storeId;
 
-  const [expenses, categories, totalRow] = await Promise.all([
-    prisma.expense.findMany({
-      where: { storeId },
-      include: { category: true },
-      orderBy: { date: "desc" },
-      take: 50,
-    }),
-    prisma.expenseCategory.findMany({ where: { storeId }, orderBy: { name: "asc" } }),
-    prisma.expense.aggregate({ where: { storeId }, _sum: { amount: true } }),
+  const [expenses, categories, totalAmount] = await Promise.all([
+    listAllExpenses(storeId, 100),
+    listExpenseCategories(storeId),
+    sumAllExpenses(storeId),
   ]);
 
   return (
@@ -28,7 +26,7 @@ export default async function ExpensesPage() {
       <div>
         <h1 className="text-2xl font-bold">هزینه‌ها</h1>
         <p className="text-muted-foreground text-sm">
-          جمع کل: {formatCurrency(Number(totalRow._sum.amount ?? 0))}
+          جمع کل: {formatCurrency(totalAmount)}
         </p>
       </div>
 

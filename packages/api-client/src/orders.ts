@@ -9,7 +9,6 @@ import type {
   Customer,
   Invoice,
   Page,
-  Payment,
 } from "@my-store/shared-types";
 import { API_ROUTES } from "@my-store/shared-utils";
 import { apiGet, apiPatch, apiPost } from "./client";
@@ -41,10 +40,11 @@ export function updateInvoiceStatus(
   return apiPatch(`${API_ROUTES.invoices}/${id}`, { status });
 }
 
+/** ثبت پرداخت — فاکتور به‌روزشده برمی‌گردد */
 export function addInvoicePayment(
   id: string,
   input: CreatePaymentInput,
-): Promise<Payment> {
+): Promise<Invoice> {
   return apiPost(`${API_ROUTES.invoices}/${id}/payments`, input);
 }
 

@@ -1,18 +1,20 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+// ============================================================
+// دفتر کل دوطرفه (Double-entry ledger) روی MongoDB
+//
+// هر رویداد مالی چند «سند» متوازن (بدهکار/بستانکار) در کالکشن
+// `transactions` می‌نویسد.
+//
+// همه‌ی توابع یک `session` اختیاری می‌گیرند تا اگر MongoDB از تراکنش
+// پشتیبانی کند (replica set)، داخل همان تراکنش اجرا شوند.
+// ============================================================
 
-/**
- * Double-entry ledger posting (دفتر کل).
- *
- * Every financial event writes balanced DEBIT/CREDIT rows to `Transaction`.
- * All helpers accept a Prisma transaction client (`Prisma.TransactionClient`)
- * so they can run inside the same DB transaction as the business write.
- */
-
-type Tx = Prisma.TransactionClient;
+import { ObjectId, type ClientSession } from "mongodb";
+import type { LedgerAccount, LedgerType } from "@my-store/shared-types";
+import { collections, idOf, nextSequence } from "./db";
 
 interface LedgerEntry {
-  account: string;
-  type: "DEBIT" | "CREDIT";
+  account: LedgerAccount;
+  type: LedgerType;
   amount: number;
   refType: string;
   refId: string;
@@ -20,34 +22,37 @@ interface LedgerEntry {
 }
 
 async function postEntries(
-  tx: Tx,
-  storeId: string,
+  storeId: string | ObjectId,
   entries: LedgerEntry[],
   date: Date = new Date(),
+  session?: ClientSession,
 ): Promise<void> {
-  // Sanity: debits must equal credits
-  const debit = entries
-    .filter((e) => e.type === "DEBIT")
-    .reduce((sum, e) => sum + e.amount, 0);
-  const credit = entries
-    .filter((e) => e.type === "CREDIT")
-    .reduce((sum, e) => sum + e.amount, 0);
+  // کنترل درستی: جمع بدهکار باید برابر جمع بستانکار باشد
+  const debit = entries.filter((e) => e.type === "DEBIT").reduce((sum, e) => sum + e.amount, 0);
+  const credit = entries.filter((e) => e.type === "CREDIT").reduce((sum, e) => sum + e.amount, 0);
   if (Math.abs(debit - credit) > 0.01) {
-    throw new Error(`Unbalanced ledger entries: debit=${debit} credit=${credit}`);
+    throw new Error(`اسناد دفتر کل متوازن نیست: debit=${debit} credit=${credit}`);
   }
+  if (entries.length === 0) return;
 
-  await tx.transaction.createMany({
-    data: entries.map((e) => ({
-      storeId,
+  const { transactions } = await collections();
+  const storeRef = idOf(storeId);
+
+  await transactions.insertMany(
+    entries.map((e) => ({
+      _id: new ObjectId(),
+      storeId: storeRef,
       date,
-      account: e.account as never,
-      type: e.type as never,
+      account: e.account,
+      type: e.type,
       amount: e.amount,
       refType: e.refType,
       refId: e.refId,
       note: e.note ?? null,
+      createdAt: new Date(),
     })),
-  });
+    { session },
+  );
 }
 
 export interface InvoiceForLedger {
@@ -60,17 +65,17 @@ export interface InvoiceForLedger {
 }
 
 /**
- * Post a sales invoice:
+ * ثبت فاکتور فروش:
  *   DEBIT  CASH_BANK            = paidAmount
- *   DEBIT  ACCOUNTS_RECEIVABLE  = total - paidAmount   (when unpaid)
+ *   DEBIT  ACCOUNTS_RECEIVABLE  = total - paidAmount   (قسمت پرداخت‌نشده)
  *   CREDIT SALES_REVENUE        = total
  *   DEBIT  COGS                 = costOfGoods
  *   CREDIT INVENTORY            = costOfGoods
  */
 export async function postInvoiceLedger(
-  tx: Tx,
   invoice: InvoiceForLedger,
   note?: string,
+  session?: ClientSession,
 ): Promise<void> {
   const unpaid = Math.max(0, invoice.total - invoice.paidAmount);
   const entries: LedgerEntry[] = [];
@@ -122,23 +127,22 @@ export async function postInvoiceLedger(
     });
   }
 
-  await postEntries(tx, invoice.storeId, entries, new Date());
+  await postEntries(invoice.storeId, entries, new Date(), session);
 }
 
 /**
- * Post a customer payment:
+ * ثبت پرداخت مشتری:
  *   DEBIT  CASH_BANK            = amount
  *   CREDIT ACCOUNTS_RECEIVABLE  = amount
  */
 export async function postPaymentLedger(
-  tx: Tx,
   storeId: string,
   invoiceId: string,
   amount: number,
   note?: string,
+  session?: ClientSession,
 ): Promise<void> {
   await postEntries(
-    tx,
     storeId,
     [
       { account: "CASH_BANK", type: "DEBIT", amount, refType: "payment", refId: invoiceId, note },
@@ -152,42 +156,57 @@ export async function postPaymentLedger(
       },
     ],
     new Date(),
+    session,
   );
 }
 
 /**
- * Post an expense:
+ * ثبت هزینه:
  *   DEBIT  EXPENSE      = amount
  *   CREDIT CASH_BANK    = amount
  */
 export async function postExpenseLedger(
-  tx: Tx,
   storeId: string,
   expenseId: string,
   amount: number,
   title: string,
+  session?: ClientSession,
 ): Promise<void> {
   await postEntries(
-    tx,
     storeId,
     [
-      { account: "EXPENSE", type: "DEBIT", amount, refType: "expense", refId: expenseId, note: title },
-      { account: "CASH_BANK", type: "CREDIT", amount, refType: "expense", refId: expenseId, note: title },
+      {
+        account: "EXPENSE",
+        type: "DEBIT",
+        amount,
+        refType: "expense",
+        refId: expenseId,
+        note: title,
+      },
+      {
+        account: "CASH_BANK",
+        type: "CREDIT",
+        amount,
+        refType: "expense",
+        refId: expenseId,
+        note: title,
+      },
     ],
     new Date(),
+    session,
   );
 }
 
 /**
- * Post a purchase:
+ * ثبت فاکتور خرید:
  *   DEBIT  INVENTORY         = total
  *   CREDIT ACCOUNTS_PAYABLE  = total - paidAmount
  *   CREDIT CASH_BANK         = paidAmount
  */
 export async function postPurchaseLedger(
-  tx: Tx,
   purchase: { id: string; storeId: string; total: number; paidAmount: number },
   note?: string,
+  session?: ClientSession,
 ): Promise<void> {
   const unpaid = Math.max(0, purchase.total - purchase.paidAmount);
   const entries: LedgerEntry[] = [
@@ -220,20 +239,37 @@ export async function postPurchaseLedger(
       note,
     });
   }
-  await postEntries(tx, purchase.storeId, entries, new Date());
+  await postEntries(purchase.storeId, entries, new Date(), session);
 }
 
-/** Next sequential document number per store, e.g. INV-0007 */
+/**
+ * شماره‌ی بعدی یک سند، مثلاً INV-0007
+ * با `$inc` روی کالکشن `counters` — حتی اگر دو کاربر همزمان فاکتور بزنند
+ * شماره‌ی تکراری تولید نمی‌شود.
+ */
 export async function nextNumber(
-  tx: Tx,
   storeId: string,
   model: "invoice" | "purchase",
+  session?: ClientSession,
 ): Promise<string> {
   const prefix = model === "invoice" ? "INV" : "PUR";
-  const count = await (model === "invoice"
-    ? tx.invoice.count({ where: { storeId } })
-    : tx.purchase.count({ where: { storeId } }));
-  return `${prefix}-${String(count + 1).padStart(4, "0")}`;
-}
+  const cols = await collections();
 
-export type { PrismaClient };
+  let seq = await nextSequence(cols, storeId, model, session);
+
+  // اگر داده‌های از قبل موجود باشد (مثلاً seed) ولی شمارنده تازه ساخته شده،
+  // شماره را با تعداد واقعی اسناد هم‌تراز می‌کنیم.
+  if (seq === 1 && model === "invoice") {
+    const existing = await cols.invoices.countDocuments({ storeId }, { session });
+    if (existing > 0) {
+      const fixed = await cols.counters.findOneAndUpdate(
+        { _id: `${idOf(storeId)}:${model}` } as never,
+        { $set: { seq: existing + 1 } },
+        { returnDocument: "after", session },
+      );
+      seq = fixed?.seq ?? existing + 1;
+    }
+  }
+
+  return `${prefix}-${String(seq).padStart(4, "0")}`;
+}

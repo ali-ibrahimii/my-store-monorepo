@@ -1,14 +1,13 @@
 {
   "name": "@my-store/dev-db",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Sandbox-only local Postgres (PGlite over a socket) for development without Docker",
+  "description": "سرور MongoDB سازگار (بدون Docker) فقط برای محیط‌های توسعه/پیش‌نمایش",
   "scripts": {
     "start": "node server.mjs"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.5.8",
-    "@electric-sql/pglite-socket": "^0.2.11"
+    "@rckflr/easydb-server": "^0.4.0"
   }
 }

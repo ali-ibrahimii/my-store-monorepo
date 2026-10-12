@@ -15,15 +15,39 @@ You can start editing the page by modifying `src/app/page.tsx`. The page auto-up
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-## Prisma Client
+## MongoDB
 
-Prisma Client is generated during install and again before the web app's dev and build commands. If you need to regenerate it manually after changing the Prisma schema, run this from the monorepo root:
+This app stores everything in **MongoDB** through the official `mongodb` Node
+driver — there is no ORM and no code-generation step. Nothing has to be
+"generated" before dev or build; you only need a reachable server.
 
 ```bash
-pnpm db:generate
+# from the monorepo root
+pnpm db:sandbox   # in-repo MongoDB-compatible dev server (data lives in memory)
+pnpm db:seed      # optional: load demo data (add `-- --fresh` to wipe first)
+pnpm dev
 ```
 
-Client generation does not require a running database or `DATABASE_URL`. Database commands such as `pnpm db:push` still need a valid `DATABASE_URL`.
+Or run real MongoDB with Docker:
+
+```bash
+pnpm docker:up    # mongo:7 (single-node replica set, so transactions work)
+                  # + mongo-express UI on :8081 and redis on :6379
+```
+
+Copy `.env.example` to `.env.local` and fill in at least `MONGODB_URI`,
+`MONGODB_DB` and `AUTH_SECRET`. See
+[`docs/MONGODB-BE-ZABAN-SADE.md`](../../docs/MONGODB-BE-ZABAN-SADE.md) for a
+plain-language explanation of MongoDB and of the data layer in `src/lib/`.
+
+Demo accounts after seeding: `owner@mystore.ir` / `123456` (OWNER) and
+`cashier@mystore.ir` / `123456` (CASHIER).
+
+> The dev sandbox server (`@my-store/dev-db`, backed by `easydb-server`) does not
+> implement transactions or `unique` indexes. `runInTransaction()` in
+> `src/lib/db.ts` detects that and falls back to sequential writes, and
+> uniqueness (e.g. barcodes) is checked in application code. Against a real
+> MongoDB the same code uses genuine transactions with no changes.
 
 ## Troubleshooting: dev-server rebuild loop
 

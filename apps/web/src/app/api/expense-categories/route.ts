@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
+import { ObjectId } from "mongodb";
 import { z } from "zod";
+import { collections, idOf } from "@/lib/db";
+import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
+import { listExpenseCategories } from "@/lib/repositories";
 
 export const dynamic = "force-dynamic";
 
@@ -10,12 +12,7 @@ export async function GET() {
   try {
     const { user, response } = await requireStoreUser();
     if (!user) return response;
-
-    const categories = await prisma.expenseCategory.findMany({
-      where: { storeId: user.storeId },
-      orderBy: { name: "asc" },
-    });
-    return NextResponse.json(categories);
+    return NextResponse.json(await listExpenseCategories(user.storeId));
   } catch (error) {
     return handleRouteError(error);
   }
@@ -40,10 +37,28 @@ export async function POST(request: Request) {
       );
     }
 
-    const category = await prisma.expenseCategory.create({
-      data: { storeId: user.storeId, name: parsed.data.name },
+    const { expenseCategories } = await collections();
+
+    const exists = await expenseCategories.findOne({
+      storeId: user.storeId,
+      name: parsed.data.name,
     });
-    return NextResponse.json(category, { status: 201 });
+    if (exists) {
+      return NextResponse.json({ error: "این دسته هزینه قبلاً ثبت شده است" }, { status: 409 });
+    }
+
+    const _id = new ObjectId();
+    await expenseCategories.insertOne({
+      _id,
+      storeId: user.storeId,
+      name: parsed.data.name,
+    });
+
+    const doc = await expenseCategories.findOne({ _id });
+    return NextResponse.json(
+      { id: idOf(doc?._id), name: doc?.name, storeId: idOf(doc?.storeId) },
+      { status: 201 },
+    );
   } catch (error) {
     return handleRouteError(error);
   }

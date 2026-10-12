@@ -1,5 +1,6 @@
-import { prisma } from "@/lib/prisma";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { listCustomers } from "@/lib/repositories";
 import { CustomerForm } from "@/components/customer-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@my-store/ui-kit";
 import { formatCurrency, toPersianDigits } from "@my-store/shared-utils";
@@ -10,12 +11,10 @@ export const metadata = { title: "مشتریان" };
 
 export default async function CustomersPage() {
   const session = await auth();
-  const storeId = session!.user.storeId;
+  if (!session?.user?.storeId) redirect("/login");
+  const storeId = session.user.storeId;
 
-  const customers = await prisma.customer.findMany({
-    where: { storeId },
-    orderBy: { createdAt: "desc" },
-  });
+  const customers = await listCustomers(storeId);
 
   return (
     <div className="space-y-8">

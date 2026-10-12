@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
-import type { DailySalesPoint, SalesReport } from "@my-store/shared-types";
+import { getDailySales } from "@/lib/stats";
+import type { SalesReport } from "@my-store/shared-types";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/reports/sales?from=&to= — daily revenue series */
+/** GET /api/reports/sales?from=&to= — سری زمانی فروش روزانه */
 export async function GET(request: Request) {
   try {
     const { user, response } = await requireStoreUser();
@@ -19,25 +19,7 @@ export async function GET(request: Request) {
       ? new Date(searchParams.get("to")! + "T23:59:59.999Z")
       : now;
 
-    const invoices = await prisma.invoice.findMany({
-      where: {
-        storeId: user.storeId,
-        createdAt: { gte: fromDate, lte: toDate },
-        status: { not: "CANCELLED" },
-      },
-      select: { createdAt: true, total: true },
-    });
-
-    const byDay = new Map<string, DailySalesPoint>();
-    for (const invoice of invoices) {
-      const day = invoice.createdAt.toISOString().slice(0, 10);
-      const point = byDay.get(day) ?? { date: day, revenue: 0, invoiceCount: 0 };
-      point.revenue += Number(invoice.total);
-      point.invoiceCount += 1;
-      byDay.set(day, point);
-    }
-
-    const points = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date));
+    const points = await getDailySales(user.storeId, fromDate, toDate);
 
     const report: SalesReport = {
       points,
