@@ -1,15 +1,36 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
-import { getDailySales, getInventoryValue, getLedgerBreakdown } from "@/lib/stats";
-import { StatCard } from "@/components/stat-card";
-import { Card, CardContent, CardHeader, CardTitle } from "@my-store/ui-kit";
+import { CalendarRange, Receipt, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+
+import { Button } from "@my-store/ui-kit/components/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@my-store/ui-kit/components/card";
+import { Input } from "@my-store/ui-kit/components/input";
+import { Label } from "@my-store/ui-kit/components/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@my-store/ui-kit/components/table";
 import {
   formatCurrency,
   formatDateJalali,
   LEDGER_ACCOUNT_LABELS,
-  toPersianDigits,
 } from "@my-store/shared-utils";
-import { TrendingUp, TrendingDown, Wallet, Receipt } from "lucide-react";
+
+import { PageHeader } from "@/components/page-header";
+import { SalesChart } from "@/components/sales-chart";
+import { StatCard } from "@/components/stat-card";
+import { auth } from "@/lib/auth";
+import { buildSalesSeries } from "@/lib/sales-series";
+import { getDailySales, getInventoryValue, getLedgerBreakdown } from "@/lib/stats";
 
 export const dynamic = "force-dynamic";
 
@@ -36,152 +57,152 @@ export default async function ReportsPage({ searchParams }: PageProps) {
     getInventoryValue(storeId),
   ]);
 
-  const sum = (account: string) => byAccount.get(account) ?? { debit: 0, credit: 0 };
+  const sum = (account: string) =>
+    byAccount.get(account) ?? { debit: 0, credit: 0 };
   const revenue = sum("SALES_REVENUE").credit - sum("SALES_REVENUE").debit;
   const cogs = sum("COGS").debit - sum("COGS").credit;
   const expenses = sum("EXPENSE").debit - sum("EXPENSE").credit;
   const grossProfit = revenue - cogs;
   const netProfit = grossProfit - expenses;
 
-  const points: [string, number][] = dailyPoints.map((p) => [p.date, p.revenue]);
-  const maxRevenue = Math.max(1, ...points.map((p) => p[1]));
+  const series = buildSalesSeries(dailyPoints, fromDate, toDate);
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">گزارش‌های مالی</h1>
-          <p className="text-muted-foreground text-sm">
-            بازه: {formatDateJalali(fromDate)} تا {formatDateJalali(toDate)}
-          </p>
-        </div>
-        <form className="flex items-end gap-2">
-          <div className="space-y-1">
-            <label className="text-muted-foreground text-xs">از</label>
-            <input
+    <div className="space-y-6">
+      <PageHeader
+        title="گزارش‌های مالی"
+        description={`بازه: ${formatDateJalali(fromDate)} تا ${formatDateJalali(toDate)}`}
+      >
+        <form className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="from" className="text-muted-foreground text-xs">
+              از تاریخ
+            </Label>
+            <Input
+              id="from"
               type="date"
               name="from"
               dir="ltr"
+              className="w-[10.5rem]"
               defaultValue={params.from ?? fromDate.toISOString().slice(0, 10)}
-              className="flex h-9 rounded-md border border-input bg-background px-2 text-sm"
             />
           </div>
-          <div className="space-y-1">
-            <label className="text-muted-foreground text-xs">تا</label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="to" className="text-muted-foreground text-xs">
+              تا تاریخ
+            </Label>
+            <Input
+              id="to"
               type="date"
               name="to"
               dir="ltr"
+              className="w-[10.5rem]"
               defaultValue={params.to ?? now.toISOString().slice(0, 10)}
-              className="flex h-9 rounded-md border border-input bg-background px-2 text-sm"
             />
           </div>
-          <button
-            type="submit"
-            className="h-9 rounded-md bg-primary px-4 text-sm text-primary-foreground"
-          >
-            اعمال
-          </button>
+          <Button type="submit">
+            <CalendarRange className="size-4" />
+            اعمال بازه
+          </Button>
         </form>
-      </div>
+      </PageHeader>
 
-      {/* P&L */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="درآمد فروش" value={formatCurrency(revenue)} icon={TrendingUp} tone="success" />
-        <StatCard title="بهای تمام‌شده (COGS)" value={formatCurrency(cogs)} icon={Receipt} tone="warning" />
-        <StatCard title="سود ناخالص" value={formatCurrency(grossProfit)} icon={Wallet} />
+        <StatCard
+          title="درآمد فروش"
+          value={formatCurrency(revenue)}
+          icon={TrendingUp}
+          tone="success"
+        />
+        <StatCard
+          title="بهای تمام‌شده کالا"
+          value={formatCurrency(cogs)}
+          icon={Receipt}
+        />
+        <StatCard
+          title="هزینه‌های عملیاتی"
+          value={formatCurrency(expenses)}
+          icon={Wallet}
+          tone="warning"
+        />
         <StatCard
           title="سود خالص"
           value={formatCurrency(netProfit)}
-          hint={`هزینه‌ها: ${formatCurrency(expenses)}`}
+          hint={`سود ناخالص: ${formatCurrency(grossProfit)}`}
           icon={netProfit >= 0 ? TrendingUp : TrendingDown}
           tone={netProfit >= 0 ? "success" : "danger"}
         />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Sales bar chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle>فروش روزانه</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {points.length === 0 ? (
-              <p className="text-muted-foreground text-sm">در این بازه فروشی ثبت نشده است.</p>
-            ) : (
-              <div className="flex h-48 items-end gap-1">
-                {points.map(([day, value]: any) => (
-                  <div
-                    key={day}
-                    className="flex h-full flex-1 flex-col items-center justify-end gap-1"
-                    title={`${day}: ${formatCurrency(value)}`}
-                  >
-                    <span className="text-[10px] text-muted-foreground">
-                      {toPersianDigits(value / 1000)}k
-                    </span>
-                    <div
-                      className="w-full rounded-t bg-primary"
-                      style={{ height: `${Math.max(4, (value / maxRevenue) * 100)}%` }}
-                    />
-                    <span className="text-[10px] text-muted-foreground" dir="ltr">
-                      {day.slice(5)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      <SalesChart
+        points={series}
+        title="روند فروش در بازه"
+        description="مجموع مبلغ فاکتورهای غیرلغوشده هر روز"
+      />
 
-        {/* Ledger breakdown */}
-        <Card>
+      <div className="grid gap-6 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle>دفتر کل — تفکیک حساب‌ها</CardTitle>
+            <CardDescription>
+              بدهکار، بستانکار و مانده هر حساب در بازه‌ی انتخابی
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {byAccount.size === 0 ? (
-              <p className="text-muted-foreground text-sm">تراکنشی در این بازه ثبت نشده است.</p>
+              <p className="text-muted-foreground text-sm">
+                تراکنشی در این بازه ثبت نشده است.
+              </p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-right text-muted-foreground">
-                      <th className="p-2 font-medium">حساب</th>
-                      <th className="p-2 font-medium">بدهکار</th>
-                      <th className="p-2 font-medium">بستانکار</th>
-                      <th className="p-2 font-medium">مانده</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...byAccount.entries()].map(([account, v]: any) => (
-                      <tr key={account} className="border-b last:border-0">
-                        <td className="p-2 font-medium">
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>حساب</TableHead>
+                      <TableHead>بدهکار</TableHead>
+                      <TableHead>بستانکار</TableHead>
+                      <TableHead>مانده</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {[...byAccount.entries()].map(([account, value]) => (
+                      <TableRow key={account}>
+                        <TableCell className="font-medium">
                           {LEDGER_ACCOUNT_LABELS[account] ?? account}
-                        </td>
-                        <td className="p-2">{formatCurrency(v.debit)}</td>
-                        <td className="p-2">{formatCurrency(v.credit)}</td>
-                        <td className="p-2 font-medium">{formatCurrency(v.debit - v.credit)}</td>
-                      </tr>
+                        </TableCell>
+                        <TableCell className="tabular-nums">
+                          {formatCurrency(value.debit)}
+                        </TableCell>
+                        <TableCell className="tabular-nums">
+                          {formatCurrency(value.credit)}
+                        </TableCell>
+                        <TableCell className="font-medium tabular-nums">
+                          {formatCurrency(value.debit - value.credit)}
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             )}
           </CardContent>
         </Card>
-      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>خلاصه انبار</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm">
-            ارزش موجودی انبار (به قیمت خرید):{" "}
-            <span className="font-bold text-primary">{formatCurrency(inventoryValue)}</span>
-          </p>
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>خلاصه انبار</CardTitle>
+            <CardDescription>ارزش موجودی به قیمت خرید</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-primary text-2xl font-bold tabular-nums">
+              {formatCurrency(inventoryValue)}
+            </div>
+            <p className="text-muted-foreground mt-1 text-xs">
+              مجموع موجودی × قیمت خرید همه‌ی کالاها
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -198,7 +198,7 @@ apps/
 packages/
   shared-types/   # تایپ‌های مشترک (DTOها، نقش‌ها، وضعیت فاکتور، …)
   shared-utils/   # توابع کمکی (formatMoney، slugify، …)
-  ui-kit/         # کامپوننت‌های UI (Button, Card, Input, Badge)
+  ui-kit/         # shadcn/ui — کامپوننت‌های مشترک وب‌اپ و اسکنر (۳۰+ کامپوننت)
   api-client/     # کلاینت تایپ‌دارِ API برای موبایل/کلاینت‌های دیگر
 tooling/
   dev-db/         # سرور MongoDB-سازگار برای توسعه
@@ -233,6 +233,50 @@ docs/
 | `/accounting/expenses` | هزینه‌ها و دسته‌بندی هزینه |
 | `/accounting/reports` | سود و زیان، گردش حساب، گزارش فروش |
 | `/scan` | اسکنر بارکد (دوربین) + ورود/خروج کالا و فید زنده |
+
+### لایه‌ی رابط کاربری — shadcn/ui
+
+همه‌ی کامپوننت‌ها و دیزاین‌ها **shadcn/ui** هستند و یک‌جا در
+`packages/ui-kit/src/components/` نگه داشته می‌شوند تا وب‌اپ داشبورد
+(`apps/web`) و اپ اسکنر (`apps/scanner`) از یک دیزاین‌سیستم مشترک استفاده کنند.
+
+```
+packages/ui-kit/src/
+  components/   # shadcn: button, card, table, sidebar, select, chart, field, empty, …
+  hooks/        # use-mobile (سایدبار shadcn)
+  lib/utils.ts  # cn() — clsx + tailwind-merge
+```
+
+- **ایمپورت** همیشه از ساب‌پَس انجام می‌شود، نه از ریشه‌ی پکیج:
+
+  ```tsx
+  import { Button } from "@my-store/ui-kit/components/button";
+  import { cn } from "@my-store/ui-kit/lib/utils";
+  ```
+
+- **افزودن کامپوننت شادcn جدید** (از داخل `packages/ui-kit`):
+
+  ```bash
+  pnpm dlx shadcn@latest add <component>
+  ```
+
+  `packages/ui-kit/components.json` طوری تنظیم شده که فایل‌ها همان‌جا
+  نوشته شوند و ایمپورت‌های داخلی به `@my-store/ui-kit/...` اشاره کنند.
+
+- **Tailwind** سورس پکیج را با `@source "../../../../packages/ui-kit/src"`
+  در `apps/web/src/app/globals.css` (و مسیر مشابه در `apps/scanner/src/index.css`)
+  اسکن می‌کند؛ بدون آن کلاس‌های کامپوننت‌های مشترک تولید نمی‌شوند.
+
+- **تم و اعلان**: `next-themes` (روشن/تاریک/سیستم) + `sonner` برای توست‌ها +
+  `chart` شادcn روی `recharts` (نمودار فروش داشبورد و گزارش‌ها).
+
+- **RTL**: کل اپ `dir="rtl"` است. سایدبار با `side="right"` رندر می‌شود و
+  کامپوننت‌های شادcn در چند جا برای راست‌به‌چپ تنظیم شده‌اند (نشانگرهای
+  `start/end` در Select و Dropdown، نوار Progress بر مبنای `width`،
+  جداکننده‌ی Breadcrumb و فلش‌ها با `rtl:rotate-180`).
+
+> اپ موبایل (React Native) از این پکیج استفاده نمی‌کند؛ کامپوننت‌هایش در
+> `apps/mobile/src/components/ui.tsx` هستند.
 
 ### API
 

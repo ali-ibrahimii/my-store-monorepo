@@ -195,7 +195,7 @@ GET        /api/scan/stream        SSE — فید لحظه‌ای اسکن‌ه�
 - `@my-store/shared-types` — Product, Order, Invoice, Expense, ScanEvent, User…
 - `@my-store/shared-utils` — barcode (چک‌سام/normalize)، formatters (IRR، تاریخ)، validation, constants
 - `@my-store/api-client` — fetch تایپ‌دار برای web + mobile
-- `@my-store/ui-kit` — Button, Card, Input, Badge… (CVA + cn)
+- `@my-store/ui-kit` — shadcn/ui (radix + CVA + cn): Button, Card, Table, Sidebar, Select, Chart…
 
 ---
 

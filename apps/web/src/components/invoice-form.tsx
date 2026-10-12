@@ -1,11 +1,37 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
-import { Button, Input, Label } from "@my-store/ui-kit";
+import { AlertCircle, Plus, Receipt, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+
 import { createInvoice } from "@my-store/api-client";
-import { formatCurrency, PAYMENT_METHOD_LABELS, toPersianDigits } from "@my-store/shared-utils";
+import { Alert, AlertDescription } from "@my-store/ui-kit/components/alert";
+import { Button } from "@my-store/ui-kit/components/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@my-store/ui-kit/components/card";
+import { Field, FieldLabel } from "@my-store/ui-kit/components/field";
+import { Input } from "@my-store/ui-kit/components/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@my-store/ui-kit/components/select";
+import { Separator } from "@my-store/ui-kit/components/separator";
+import { Spinner } from "@my-store/ui-kit/components/spinner";
+import { Textarea } from "@my-store/ui-kit/components/textarea";
+import {
+  formatCurrency,
+  PAYMENT_METHOD_LABELS,
+  toPersianDigits,
+} from "@my-store/shared-utils";
 import type { Customer, Product } from "@my-store/shared-types";
 
 interface InvoiceFormProps {
@@ -19,30 +45,36 @@ interface ItemRow {
   unitPrice: number;
 }
 
+const EMPTY_ROW: ItemRow = { productId: "", qty: 1, unitPrice: 0 };
+
 export function InvoiceForm({ products, customers }: InvoiceFormProps) {
   const router = useRouter();
-  const [items, setItems] = useState<ItemRow[]>([{ productId: "", qty: 1, unitPrice: 0 }]);
-  const [customerId, setCustomerId] = useState("");
-  const [discount, setDiscount] = useState(0);
-  const [tax, setTax] = useState(0);
-  const [note, setNote] = useState("");
-  const [paymentAmount, setPaymentAmount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD" | "TRANSFER" | "CREDIT">("CASH");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [items, setItems] = React.useState<ItemRow[]>([{ ...EMPTY_ROW }]);
+  const [customerId, setCustomerId] = React.useState("");
+  const [discount, setDiscount] = React.useState(0);
+  const [tax, setTax] = React.useState(0);
+  const [note, setNote] = React.useState("");
+  const [paymentAmount, setPaymentAmount] = React.useState(0);
+  const [paymentMethod, setPaymentMethod] = React.useState<
+    "CASH" | "CARD" | "TRANSFER" | "CREDIT"
+  >("CASH");
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
 
-  const subtotal = useMemo(
-    () => items.reduce((sum, i) => sum + (i.qty * i.unitPrice || 0), 0),
+  const subtotal = React.useMemo(
+    () => items.reduce((sum, item) => sum + (item.qty * item.unitPrice || 0), 0),
     [items],
   );
   const total = Math.max(0, subtotal - discount + tax);
 
   function updateItem(index: number, patch: Partial<ItemRow>) {
-    setItems((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+    setItems((prev) =>
+      prev.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    );
   }
 
   function addItem() {
-    setItems((prev) => [...prev, { productId: "", qty: 1, unitPrice: 0 }]);
+    setItems((prev) => [...prev, { ...EMPTY_ROW }]);
   }
 
   function removeItem(index: number) {
@@ -59,7 +91,7 @@ export function InvoiceForm({ products, customers }: InvoiceFormProps) {
 
   async function onSubmit() {
     setError(null);
-    const validItems = items.filter((i) => i.productId && i.qty > 0);
+    const validItems = items.filter((item) => item.productId && item.qty > 0);
     if (validItems.length === 0) {
       setError("حداقل یک آیتم معتبر انتخاب کنید");
       return;
@@ -77,12 +109,13 @@ export function InvoiceForm({ products, customers }: InvoiceFormProps) {
           ? { payment: { method: paymentMethod, amount: paymentAmount } }
           : {}),
       });
-      setItems([{ productId: "", qty: 1, unitPrice: 0 }]);
+      setItems([{ ...EMPTY_ROW }]);
       setCustomerId("");
       setDiscount(0);
       setTax(0);
       setNote("");
       setPaymentAmount(0);
+      toast.success("فاکتور ثبت شد");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "خطا در ثبت فاکتور");
@@ -92,138 +125,201 @@ export function InvoiceForm({ products, customers }: InvoiceFormProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="space-y-3">
         {items.map((item, index) => (
-          <div key={index} className="flex flex-wrap items-end gap-2 rounded-md border p-3">
-            <div className="min-w-40 flex-1 space-y-1">
-              <Label>محصول</Label>
-              <select
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={item.productId}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onProductChange(index, e.target.value)}
+          <div
+            key={index}
+            className="bg-muted/30 grid gap-3 rounded-lg border p-3 sm:grid-cols-[2fr_5rem_7rem_auto] sm:items-end"
+          >
+            <Field>
+              <FieldLabel>محصول</FieldLabel>
+              <Select
+                value={item.productId || "NONE"}
+                onValueChange={(value) =>
+                  onProductChange(index, value === "NONE" ? "" : value)
+                }
               >
-                <option value="">— انتخاب کنید —</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} (موجودی: {toPersianDigits(p.stock)})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="w-24 space-y-1">
-              <Label>تعداد</Label>
+                <SelectTrigger>
+                  <SelectValue placeholder="انتخاب کنید" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">— انتخاب کنید —</SelectItem>
+                  {products.map((product) => (
+                    <SelectItem key={product.id} value={product.id}>
+                      {product.name} (موجودی: {toPersianDigits(product.stock)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel>تعداد</FieldLabel>
               <Input
                 type="number"
                 min={1}
                 dir="ltr"
                 value={item.qty}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateItem(index, { qty: Number(e.target.value) })}
+                onChange={(event) =>
+                  updateItem(index, { qty: Number(event.target.value) })
+                }
               />
-            </div>
-            <div className="w-36 space-y-1">
-              <Label>قیمت واحد</Label>
+            </Field>
+            <Field>
+              <FieldLabel>قیمت واحد</FieldLabel>
               <Input
                 type="number"
                 min={0}
                 dir="ltr"
                 value={item.unitPrice}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateItem(index, { unitPrice: Number(e.target.value) })}
+                onChange={(event) =>
+                  updateItem(index, { unitPrice: Number(event.target.value) })
+                }
               />
-            </div>
+            </Field>
             <Button
               variant="ghost"
               size="icon"
+              type="button"
               onClick={() => removeItem(index)}
               disabled={items.length === 1}
-              title="حذف"
+              title="حذف ردیف"
+              className="text-destructive hover:text-destructive"
             >
-              <Trash2 className="h-4 w-4 text-destructive" />
+              <Trash2 className="size-4" />
             </Button>
           </div>
         ))}
-        <Button variant="outline" size="sm" onClick={addItem}>
-          <Plus className="h-4 w-4" />
+        <Button variant="outline" size="sm" type="button" onClick={addItem}>
+          <Plus className="size-4" />
           افزودن آیتم
         </Button>
       </div>
 
+      <Separator />
+
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="space-y-1">
-          <Label>مشتری</Label>
-          <select
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            value={customerId}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCustomerId(e.target.value)}
+        <Field>
+          <FieldLabel>مشتری</FieldLabel>
+          <Select
+            value={customerId || "NONE"}
+            onValueChange={(value) => setCustomerId(value === "NONE" ? "" : value)}
           >
-            <option value="">— مشتری حضوری —</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-1">
-          <Label>تخفیف</Label>
-          <Input type="number" min={0} dir="ltr" value={discount} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDiscount(Number(e.target.value))} />
-        </div>
-        <div className="space-y-1">
-          <Label>مالیات</Label>
-          <Input type="number" min={0} dir="ltr" value={tax} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTax(Number(e.target.value))} />
-        </div>
+            <SelectTrigger>
+              <SelectValue placeholder="مشتری حضوری" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="NONE">— مشتری حضوری —</SelectItem>
+              {customers.map((customer) => (
+                <SelectItem key={customer.id} value={customer.id}>
+                  {customer.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field>
+          <FieldLabel>تخفیف (تومان)</FieldLabel>
+          <Input
+            type="number"
+            min={0}
+            dir="ltr"
+            value={discount}
+            onChange={(event) => setDiscount(Number(event.target.value))}
+          />
+        </Field>
+        <Field>
+          <FieldLabel>مالیات (تومان)</FieldLabel>
+          <Input
+            type="number"
+            min={0}
+            dir="ltr"
+            value={tax}
+            onChange={(event) => setTax(Number(event.target.value))}
+          />
+        </Field>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1">
-          <Label>پرداخت اولیه (اختیاری)</Label>
+        <Field>
+          <FieldLabel>پرداخت اولیه (اختیاری)</FieldLabel>
           <Input
             type="number"
             min={0}
             dir="ltr"
             value={paymentAmount}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPaymentAmount(Number(e.target.value))}
+            onChange={(event) => setPaymentAmount(Number(event.target.value))}
             placeholder="0"
           />
-        </div>
-        <div className="space-y-1">
-          <Label>روش پرداخت</Label>
-          <select
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+        </Field>
+        <Field>
+          <FieldLabel>روش پرداخت</FieldLabel>
+          <Select
             value={paymentMethod}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPaymentMethod(e.target.value as typeof paymentMethod)}
+            onValueChange={(value) =>
+              setPaymentMethod(value as typeof paymentMethod)
+            }
           >
-            {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
       </div>
 
-      <div className="space-y-1">
-        <Label>یادداشت</Label>
-        <Input value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} placeholder="اختیاری" />
-      </div>
+      <Field>
+        <FieldLabel>یادداشت</FieldLabel>
+        <Textarea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder="اختیاری"
+          rows={2}
+        />
+      </Field>
 
-      <div className="rounded-md border bg-muted/40 p-3 text-sm">
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">جمع کل:</span>
-          <span>{formatCurrency(subtotal)}</span>
-        </div>
-        <div className="flex justify-between font-bold">
-          <span>مبلغ قابل پرداخت:</span>
-          <span className="text-primary">{formatCurrency(total)}</span>
-        </div>
-      </div>
+      <Card className="bg-muted/40">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">جمع فاکتور</CardTitle>
+          <CardDescription>مبالغ به تومان محاسبه می‌شود.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">جمع کل</span>
+            <span className="tabular-nums">{formatCurrency(subtotal)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">تخفیف</span>
+            <span className="tabular-nums">{formatCurrency(discount)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">مالیات</span>
+            <span className="tabular-nums">{formatCurrency(tax)}</span>
+          </div>
+          <Separator />
+          <div className="flex items-center justify-between font-bold">
+            <span>مبلغ قابل پرداخت</span>
+            <span className="text-primary tabular-nums">{formatCurrency(total)}</span>
+          </div>
+        </CardContent>
+      </Card>
 
       {error ? (
-        <p className="rounded-md bg-destructive/10 p-2 text-sm text-destructive">{error}</p>
+        <Alert variant="destructive">
+          <AlertCircle className="size-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
-      <Button onClick={onSubmit} disabled={busy}>
-        {busy ? "در حال ثبت..." : "ثبت فاکتور فروش"}
+      <Button onClick={onSubmit} disabled={busy} className="w-full sm:w-auto">
+        {busy ? <Spinner /> : <Receipt className="size-4" />}
+        {busy ? "در حال ثبت…" : "ثبت فاکتور فروش"}
       </Button>
     </div>
   );

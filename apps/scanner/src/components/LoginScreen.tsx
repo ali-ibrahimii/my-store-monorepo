@@ -1,6 +1,17 @@
 import { useState, type FormEvent } from "react";
-import { ScanLine } from "lucide-react";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@my-store/ui-kit";
+import { AlertCircle, ScanLine } from "lucide-react";
+
+import { Alert, AlertDescription } from "@my-store/ui-kit/components/alert";
+import { Button } from "@my-store/ui-kit/components/button";
+import { Card, CardContent, CardHeader } from "@my-store/ui-kit/components/card";
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+} from "@my-store/ui-kit/components/field";
+import { Input } from "@my-store/ui-kit/components/input";
+import { Separator } from "@my-store/ui-kit/components/separator";
+import { Spinner } from "@my-store/ui-kit/components/spinner";
 import { apiPost } from "@my-store/api-client";
 import { API_ROUTES } from "@my-store/shared-utils";
 import type { MobileSession } from "@my-store/shared-types";
@@ -37,51 +48,58 @@ export function LoginScreen({ onLoggedIn }: LoginScreenProps) {
   return (
     <div className="flex min-h-full items-center justify-center p-4">
       <Card className="w-full max-w-sm">
-        <CardHeader className="items-center text-center">
-          <div className="bg-primary text-primary-foreground mb-2 flex h-14 w-14 items-center justify-center rounded-2xl">
-            <ScanLine className="h-7 w-7" />
+        <CardHeader className="items-center gap-2 text-center">
+          <div className="bg-primary text-primary-foreground mb-2 flex size-14 items-center justify-center rounded-2xl">
+            <ScanLine className="size-7" />
           </div>
-          <CardTitle>اسکنر فروشگاه من</CardTitle>
+          <h1 className="text-lg font-semibold">اسکنر فروشگاه من</h1>
           <p className="text-muted-foreground text-sm">
             برای اسکن بارکد وارد حساب فروشگاه شوید
           </p>
         </CardHeader>
         <CardContent>
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label htmlFor="email" className="text-sm font-medium">
-                ایمیل
-              </label>
-              <Input
-                id="email"
-                type="email"
-                dir="ltr"
-                autoComplete="username"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label htmlFor="password" className="text-sm font-medium">
-                رمز عبور
-              </label>
-              <Input
-                id="password"
-                type="password"
-                dir="ltr"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
+          <form onSubmit={onSubmit} className="space-y-6">
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="email">ایمیل</FieldLabel>
+                <Input
+                  id="email"
+                  type="email"
+                  dir="ltr"
+                  autoComplete="username"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="password">رمز عبور</FieldLabel>
+                <Input
+                  id="password"
+                  type="password"
+                  dir="ltr"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+              </Field>
+            </FieldGroup>
+
             {error ? (
-              <p className="text-destructive text-sm">{error}</p>
+              <Alert variant="destructive">
+                <AlertCircle className="size-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             ) : null}
-            <Button type="submit" disabled={busy} className="w-full" size="lg">
+
+            <Button type="submit" disabled={busy} size="lg" className="w-full">
+              {busy ? <Spinner /> : null}
               {busy ? "در حال ورود…" : "ورود"}
             </Button>
+
+            <Separator />
+
             <p className="text-muted-foreground text-center text-xs">
               سرور: {apiBaseUrlLabel()}
             </p>

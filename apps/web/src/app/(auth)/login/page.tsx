@@ -1,17 +1,23 @@
 import { Suspense } from "react";
+
+import { Skeleton } from "@my-store/ui-kit/components/skeleton";
+
 import { LoginForm } from "@/components/login-form";
 
 export const metadata = { title: "ورود" };
 
 export default function LoginPage() {
   return (
-    <main className="flex min-h-full items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <h1 className="mb-6 text-center text-2xl font-bold">ورود به فروشگاه من</h1>
-        <Suspense fallback={null}>
-          <LoginForm />
-        </Suspense>
+    <div className="space-y-6">
+      <div className="space-y-1 text-center">
+        <h1 className="text-xl font-bold">ورود به فروشگاه من</h1>
+        <p className="text-muted-foreground text-sm">
+          برای دیدن داشبورد، ایمیل و رمز عبور خود را وارد کنید.
+        </p>
       </div>
-    </main>
+      <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+        <LoginForm />
+      </Suspense>
+    </div>
   );
 }

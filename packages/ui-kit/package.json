@@ -3,19 +3,32 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "shadcn/ui components shared by the web dashboard and the scanner PWA",
   "exports": {
-    ".": "./src/index.ts",
-    "./*": "./src/*.tsx"
+    "./components/*": "./src/components/*.tsx",
+    "./hooks/*": "./src/hooks/*.ts",
+    "./lib/utils": "./src/lib/utils.ts"
   },
-  "peerDependencies": {
-    "react": ">=18"
+  "scripts": {
+    "lint": "echo \"ui-kit: nothing to lint\"",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "lucide-react": "^1.21.0",
+    "next-themes": "^0.4.6",
+    "radix-ui": "^1.6.0",
+    "recharts": "2.15.4",
+    "sonner": "^2.0.8",
     "tailwind-merge": "^3.6.0"
   },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
   "devDependencies": {
-    "@types/react": "^19"
+    "@types/react": "19.2.18",
+    "typescript": "^5"
   }
 }

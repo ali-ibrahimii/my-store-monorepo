@@ -8,9 +8,40 @@ import {
   Keyboard,
   LogOut,
   Package,
+  PackageSearch,
   ScanLine,
 } from "lucide-react";
-import { Badge, Button, Card, CardContent, Input } from "@my-store/ui-kit";
+
+import { Alert, AlertDescription } from "@my-store/ui-kit/components/alert";
+import { Badge } from "@my-store/ui-kit/components/badge";
+import { Button } from "@my-store/ui-kit/components/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@my-store/ui-kit/components/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@my-store/ui-kit/components/empty";
+import { Input } from "@my-store/ui-kit/components/input";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@my-store/ui-kit/components/item";
+import { Separator } from "@my-store/ui-kit/components/separator";
+import { Spinner } from "@my-store/ui-kit/components/spinner";
+import { Tabs, TabsList, TabsTrigger } from "@my-store/ui-kit/components/tabs";
 import { lookupByBarcode, listScanEvents, recordScan } from "@my-store/api-client";
 import {
   SCAN_TYPE_LABELS,
@@ -212,12 +243,14 @@ export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
       {/* سربرگ */}
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="bg-primary text-primary-foreground flex h-10 w-10 items-center justify-center rounded-xl">
-            <ScanLine className="h-5 w-5" />
+          <div className="bg-primary text-primary-foreground flex size-10 items-center justify-center rounded-xl">
+            <ScanLine className="size-5" />
           </div>
           <div>
-            <div className="text-sm font-bold leading-tight">اسکنر فروشگاه</div>
-            <div className="text-muted-foreground text-xs">{session.user.name ?? session.user.email}</div>
+            <div className="text-sm font-semibold leading-tight">اسکنر فروشگاه</div>
+            <div className="text-muted-foreground text-xs">
+              {session.user.name ?? session.user.email}
+            </div>
           </div>
         </div>
         <Button
@@ -230,36 +263,43 @@ export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
             onLoggedOut();
           }}
         >
-          <LogOut className="h-5 w-5" />
+          <LogOut className="size-5" />
         </Button>
       </header>
 
       {/* نوع اسکن + تعداد */}
       <Card>
         <CardContent className="space-y-3 p-3">
-          <div className="flex flex-wrap gap-1.5">
-            {SCAN_TYPES.map((type) => (
-              <button
-                key={type}
-                onClick={() => setScanType(type)}
-                className={
-                  scanType === type
-                    ? "bg-primary text-primary-foreground rounded-full px-3 py-1.5 text-xs font-semibold"
-                    : "bg-secondary text-secondary-foreground rounded-full px-3 py-1.5 text-xs font-medium"
-                }
-              >
-                {SCAN_TYPE_LABELS[type]}
-              </button>
-            ))}
-          </div>
+          <Tabs value={scanType} onValueChange={(value) => setScanType(value as ScanType)}>
+            <TabsList className="h-auto w-full flex-wrap">
+              {SCAN_TYPES.map((type) => (
+                <TabsTrigger key={type} value={type}>
+                  {SCAN_TYPE_LABELS[type]}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+
+          <Separator />
+
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">تعداد</span>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={() => setQty((q) => Math.max(1, q - 1))}>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setQty((current) => Math.max(1, current - 1))}
+              >
                 −
               </Button>
-              <span className="w-10 text-center text-lg font-bold">{formatNumber(qty)}</span>
-              <Button variant="outline" size="icon" onClick={() => setQty((q) => q + 1)}>
+              <span className="w-10 text-center text-lg font-bold tabular-nums">
+                {formatNumber(qty)}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setQty((current) => current + 1)}
+              >
                 +
               </Button>
             </div>
@@ -268,13 +308,18 @@ export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
       </Card>
 
       {/* دوربین */}
-      <Card className="overflow-hidden">
+      <Card className="gap-0 overflow-hidden py-0">
         <div className="bg-foreground/95 relative aspect-square w-full">
           <div id="scan-region" ref={regionRef} className="absolute inset-0" />
           {!running ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
-              <Camera className="h-10 w-10 opacity-70" />
-              <Button onClick={() => void start()} disabled={starting} className="rounded-full px-6">
+              <Camera className="size-10 opacity-70" />
+              <Button
+                onClick={() => void start()}
+                disabled={starting}
+                className="rounded-full px-6"
+              >
+                {starting ? <Spinner /> : <Camera className="size-4" />}
                 {starting ? "در حال آماده‌سازی…" : "شروع اسکن با دوربین"}
               </Button>
             </div>
@@ -283,17 +328,21 @@ export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
         {running ? (
           <CardContent className="flex items-center justify-between gap-2 p-3">
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
-              <span className="bg-success inline-block h-2 w-2 animate-pulse rounded-full" />
+              <span className="bg-success inline-block size-2 animate-pulse rounded-full" />
               دوربین فعال — بارکد را روبه‌رو بگیرید
             </span>
             <div className="flex gap-1.5">
               {torchSupported ? (
                 <Button variant="outline" size="icon" onClick={() => void toggleTorch()}>
-                  {torch ? <FlashlightOff className="h-4 w-4" /> : <Flashlight className="h-4 w-4" />}
+                  {torch ? (
+                    <FlashlightOff className="size-4" />
+                  ) : (
+                    <Flashlight className="size-4" />
+                  )}
                 </Button>
               ) : null}
               <Button variant="outline" size="icon" onClick={() => void stop()}>
-                <CameraOff className="h-4 w-4" />
+                <CameraOff className="size-4" />
               </Button>
             </div>
           </CardContent>
@@ -301,24 +350,28 @@ export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
       </Card>
 
       {error ? (
-        <p className="text-destructive px-1 text-sm">{error}</p>
+        <Alert variant="destructive">
+          <CameraOff className="size-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
       {/* ورود دستی */}
       <Card>
         <CardContent className="p-3">
-          <button
-            className="text-muted-foreground flex w-full items-center justify-center gap-2 text-sm"
-            onClick={() => setManualOpen((v) => !v)}
+          <Button
+            variant="ghost"
+            className="text-muted-foreground w-full"
+            onClick={() => setManualOpen((value) => !value)}
           >
-            <Keyboard className="h-4 w-4" />
+            <Keyboard className="size-4" />
             ورود دستی بارکد
-          </button>
+          </Button>
           {manualOpen ? (
             <form
               className="mt-3 flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
+              onSubmit={(event) => {
+                event.preventDefault();
                 void submitBarcode(manualCode);
                 setManualCode("");
               }}
@@ -328,9 +381,10 @@ export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
                 inputMode="numeric"
                 placeholder="6281111000019"
                 value={manualCode}
-                onChange={(e) => setManualCode(e.target.value)}
+                onChange={(event) => setManualCode(event.target.value)}
               />
               <Button type="submit" disabled={busy || !manualCode.trim()}>
+                {busy ? <Spinner /> : null}
                 ثبت
               </Button>
             </form>
@@ -342,9 +396,9 @@ export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
       {last ? (
         <Card className="border-success/40 bg-success/5">
           <CardContent className="flex items-start gap-3 p-3">
-            <CheckCircle2 className="text-success mt-0.5 h-5 w-5 shrink-0" />
+            <CheckCircle2 className="text-success mt-0.5 size-5 shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-bold">
+              <div className="text-sm font-semibold">
                 {last.product ? last.product.name : `بارکد ${last.event.barcode}`}
               </div>
               <div className="text-muted-foreground mt-0.5 text-xs">
@@ -365,34 +419,49 @@ export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
 
       {/* آخرین اسکن‌ها */}
       <Card>
-        <CardContent className="p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-bold">آخرین اسکن‌ها</span>
+        <CardHeader className="p-3 pb-0">
+          <CardTitle className="flex items-center justify-between gap-2 text-sm">
+            آخرین اسکن‌ها
             <Badge variant="secondary">لحظه‌ای روی داشبورد</Badge>
-          </div>
+          </CardTitle>
+          <CardDescription className="text-xs">
+            رویدادهای همین دستگاه و بقیه‌ی دستگاه‌ها
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-3">
           {events.length === 0 ? (
-            <p className="text-muted-foreground text-xs">هنوز اسکنی ثبت نشده است.</p>
+            <Empty className="border border-dashed p-4">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <PackageSearch />
+                </EmptyMedia>
+                <EmptyTitle>هنوز اسکنی ثبت نشده</EmptyTitle>
+                <EmptyDescription>
+                  اولین بارکد را با دوربین یا ورود دستی ثبت کنید.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
-            <ul className="divide-y">
+            <ItemGroup>
               {events.map((event) => (
-                <li key={event.id} className="flex items-center justify-between gap-2 py-2">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Package className="text-muted-foreground h-4 w-4 shrink-0" />
-                    <div className="min-w-0">
-                      <div className="truncate text-xs font-medium">
-                        {event.product?.name ?? event.barcode}
-                      </div>
-                      <div className="text-muted-foreground text-[10px]">
-                        {formatDateTimeJalali(event.createdAt)}
-                      </div>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="shrink-0 text-[10px]">
-                    {SCAN_TYPE_LABELS[event.type]} · {formatNumber(event.qty)}
-                  </Badge>
-                </li>
+                <Item key={event.id} size="sm" variant="outline">
+                  <ItemMedia variant="icon">
+                    <Package />
+                  </ItemMedia>
+                  <ItemContent>
+                    <ItemTitle>{event.product?.name ?? event.barcode}</ItemTitle>
+                    <ItemDescription>
+                      {formatDateTimeJalali(event.createdAt)}
+                    </ItemDescription>
+                  </ItemContent>
+                  <ItemActions>
+                    <Badge variant="outline">
+                      {SCAN_TYPE_LABELS[event.type]} · {formatNumber(event.qty)}
+                    </Badge>
+                  </ItemActions>
+                </Item>
               ))}
-            </ul>
+            </ItemGroup>
           )}
         </CardContent>
       </Card>

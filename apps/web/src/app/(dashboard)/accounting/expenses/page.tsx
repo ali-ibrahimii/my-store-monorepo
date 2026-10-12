@@ -1,10 +1,22 @@
 import { redirect } from "next/navigation";
+import { Wallet } from "lucide-react";
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@my-store/ui-kit/components/card";
+import { formatCurrency } from "@my-store/shared-utils";
+
+import { ExpenseForm } from "@/components/expense-form";
+import { ExpensesTable, type ExpenseRow } from "@/components/expenses-table";
+import { PageHeader } from "@/components/page-header";
+import { StatCard } from "@/components/stat-card";
 import { auth } from "@/lib/auth";
 import { listAllExpenses, listExpenseCategories } from "@/lib/repositories";
 import { sumAllExpenses } from "@/lib/stats";
-import { ExpenseForm } from "@/components/expense-form";
-import { Card, CardContent, CardHeader, CardTitle } from "@my-store/ui-kit";
-import { formatCurrency, formatDateJalali } from "@my-store/shared-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -21,53 +33,55 @@ export default async function ExpensesPage() {
     sumAllExpenses(storeId),
   ]);
 
+  const rows: ExpenseRow[] = expenses.map((expense) => ({
+    id: expense.id,
+    title: expense.title,
+    categoryName: expense.category?.name ?? null,
+    date: expense.date,
+    amount: Number(expense.amount),
+    note: expense.note ?? null,
+  }));
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">هزینه‌ها</h1>
-        <p className="text-muted-foreground text-sm">
-          جمع کل: {formatCurrency(totalAmount)}
-        </p>
+    <div className="space-y-6">
+      <PageHeader title="هزینه‌ها" description="هزینه‌های جاری فروشگاه" />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="جمع کل هزینه‌ها"
+          value={formatCurrency(totalAmount)}
+          hint="از ابتدای فعالیت فروشگاه"
+          icon={Wallet}
+          tone="warning"
+        />
+        <StatCard
+          title="تعداد رکوردها"
+          value={String(expenses.length)}
+          hint="آخرین ۱۰۰ هزینه"
+          icon={Wallet}
+        />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader>
-            <CardTitle>لیست هزینه‌ها</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Wallet className="size-4" />
+              لیست هزینه‌ها
+            </CardTitle>
+            <CardDescription>جست‌وجو بر اساس عنوان، دسته یا یادداشت</CardDescription>
           </CardHeader>
           <CardContent>
-            {expenses.length === 0 ? (
-              <p className="text-muted-foreground text-sm">هنوز هزینه‌ای ثبت نشده است.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-right text-muted-foreground">
-                      <th className="p-2 font-medium">عنوان</th>
-                      <th className="p-2 font-medium">دسته</th>
-                      <th className="p-2 font-medium">تاریخ</th>
-                      <th className="p-2 font-medium">مبلغ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {expenses.map((e: any) => (
-                      <tr key={e.id} className="border-b last:border-0">
-                        <td className="p-2 font-medium">{e.title}</td>
-                        <td className="p-2 text-muted-foreground">{e.category?.name ?? "—"}</td>
-                        <td className="p-2 text-muted-foreground">{formatDateJalali(e.date)}</td>
-                        <td className="p-2">{formatCurrency(Number(e.amount))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <ExpensesTable expenses={rows} />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle>ثبت هزینه جدید</CardTitle>
+            <CardDescription>
+              هر هزینه به‌صورت خودکار در دفتر کل ثبت می‌شود.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ExpenseForm categories={categories} />

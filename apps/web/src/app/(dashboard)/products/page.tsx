@@ -1,9 +1,20 @@
 import { redirect } from "next/navigation";
+import { Package } from "lucide-react";
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@my-store/ui-kit/components/card";
+import { toPersianDigits } from "@my-store/shared-utils";
+
+import { PageHeader } from "@/components/page-header";
+import { ProductForm } from "@/components/product-form";
+import { ProductsTable, type ProductRow } from "@/components/products-table";
 import { auth } from "@/lib/auth";
 import { listAllProducts, listCategories } from "@/lib/repositories";
-import { ProductForm } from "@/components/product-form";
-import { Badge, Card, CardContent, CardHeader, CardTitle } from "@my-store/ui-kit";
-import { formatCurrency, toPersianDigits } from "@my-store/shared-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -19,65 +30,47 @@ export default async function ProductsPage() {
     listCategories(storeId),
   ]);
 
+  const rows: ProductRow[] = products.map((product) => ({
+    id: product.id,
+    name: product.name,
+    barcode: product.barcode,
+    sku: product.sku ?? null,
+    categoryName: product.category?.name ?? null,
+    costPrice: Number(product.costPrice),
+    salePrice: Number(product.salePrice),
+    stock: Number(product.stock),
+    lowStockThreshold: Number(product.lowStockThreshold),
+  }));
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">محصولات</h1>
-        <p className="text-muted-foreground text-sm">
-          {toPersianDigits(products.length)} قلم کالا در انبار
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="محصولات"
+        description={`${toPersianDigits(products.length)} قلم کالا در انبار`}
+      />
 
       <div className="grid gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader>
-            <CardTitle>لیست محصولات</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Package className="size-4" />
+              لیست محصولات
+            </CardTitle>
+            <CardDescription>
+              جست‌وجو، فیلتر کم‌موجودها و وضعیت موجودی هر کالا
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {products.length === 0 ? (
-              <p className="text-muted-foreground text-sm">
-                هنوز محصولی ثبت نشده — از فرم کنار صفحه استفاده کنید.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-right text-muted-foreground">
-                      <th className="p-2 font-medium">نام</th>
-                      <th className="p-2 font-medium">بارکد</th>
-                      <th className="p-2 font-medium">دسته</th>
-                      <th className="p-2 font-medium">قیمت فروش</th>
-                      <th className="p-2 font-medium">موجودی</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {products.map((p: any) => (
-                      <tr key={p.id} className="border-b last:border-0">
-                        <td className="p-2 font-medium">{p.name}</td>
-                        <td className="p-2" dir="ltr">{p.barcode}</td>
-                        <td className="p-2 text-muted-foreground">
-                          {p.category?.name ?? "—"}
-                        </td>
-                        <td className="p-2">{formatCurrency(Number(p.salePrice))}</td>
-                        <td className="p-2">
-                          <Badge
-                            variant={p.stock <= p.lowStockThreshold ? "warning" : "secondary"}
-                          >
-                            {toPersianDigits(p.stock)}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <ProductsTable products={rows} />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle>افزودن محصول</CardTitle>
+            <CardDescription>
+              بارکد را دقیق وارد کنید؛ اسکنر موبایل همین بارکد را می‌خواند.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ProductForm categories={categories} />
