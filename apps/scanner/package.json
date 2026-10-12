@@ -1,0 +1,32 @@
+{
+  "name": "@my-store/scanner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit",
+    "generate-icons": "node scripts/generate-icons.mjs"
+  },
+  "dependencies": {
+    "@my-store/api-client": "workspace:*",
+    "@my-store/shared-types": "workspace:*",
+    "@my-store/shared-utils": "workspace:*",
+    "@my-store/ui-kit": "workspace:*",
+    "html5-qrcode": "^2.3.8",
+    "lucide-react": "^1.21.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4",
+    "@types/react": "~19.2.18",
+    "@types/react-dom": "~19.2.3",
+    "@vitejs/plugin-react": "^5.0.0",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vite": "^7.1.0"
+  }
+}

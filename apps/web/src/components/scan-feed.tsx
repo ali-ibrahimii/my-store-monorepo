@@ -1,56 +1,74 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Radio } from "lucide-react";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@my-store/ui-kit";
 import { listScanEvents, subscribeToScans } from "@my-store/api-client";
-import { formatDateTimeJalali, SCAN_TYPE_LABELS, timeAgo } from "@my-store/shared-utils";
+import { formatDateTimeJalali, SCAN_TYPE_LABELS, timeAgo, toPersianDigits } from "@my-store/shared-utils";
 import type { ScanEvent } from "@my-store/shared-types";
 
 const MAX_ITEMS = 50;
+/** فاصله‌ی پولینگ پشتیبان — اگر SSE قطع شود چیزی از قلم نمی‌افتد. */
+const POLL_INTERVAL_MS = 15_000;
 
-/** Live feed of scan events — updates in real-time over SSE. */
+/** ادغام رویدادها بر اساس id، جدیدترین اول. */
+function mergeEvents(fresh: ScanEvent[], prev: ScanEvent[]): ScanEvent[] {
+  const seen = new Set(fresh.map((e) => e.id));
+  const merged = [...fresh];
+  for (const event of prev) {
+    if (!seen.has(event.id)) merged.push(event);
+  }
+  merged.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return merged.slice(0, MAX_ITEMS);
+}
+
+/**
+ * فید زنده‌ی رویدادهای اسکن.
+ *
+ * دو لایه دارد:
+ *   ۱) SSE (`/api/scan/stream`) — لحظه‌ای، وقتی اتصال برقرار است
+ *   ۲) پولینگ سبک هر ۱۵ ثانیه — روی سرورلس (Vercel) که عمر کانکشن
+ *      محدود است، تضمین می‌کند هیچ اسکنی از قلم نیفتد
+ */
 export function ScanFeed() {
   const [events, setEvents] = useState<ScanEvent[]>([]);
   const [connected, setConnected] = useState(false);
+  const seenIdsRef = useRef<Set<string>>(new Set());
+
+  const refresh = useCallback(async () => {
+    try {
+      const page = await listScanEvents({ pageSize: 30 });
+      for (const event of page.items) seenIdsRef.current.add(event.id);
+      setEvents((prev) => mergeEvents(page.items, prev));
+    } catch {
+      // شبکه قطع است — دور بعدی دوباره تلاش می‌کند
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    // بارگذاری اولیه (با تأخیر صفر تا setState همزمان داخل effect نباشد)
+    const initialTimer = setTimeout(() => void refresh(), 0);
 
-    // Initial load
-    listScanEvents({ pageSize: 30 })
-      .then((page) => {
-        if (!cancelled) setEvents(page.items);
-      })
-      .catch(() => {});
-
-    // Real-time subscription
+    // لایه‌ی ۱: SSE — رویدادها آنی می‌رسند
     const unsubscribe = subscribeToScans(
       (event) => {
-        setEvents((prev) => [event, ...prev].slice(0, MAX_ITEMS));
-        if (!cancelled) setConnected(true);
+        if (seenIdsRef.current.has(event.id)) return;
+        seenIdsRef.current.add(event.id);
+        setEvents((prev) => mergeEvents([event], prev));
+        setConnected(true);
       },
       () => setConnected(false),
     );
 
-    // Mark connected after mount (defer to avoid set-state-in-effect lint)
-    const connectTimer = setTimeout(() => {
-      if (!cancelled) setConnected(true);
-    }, 0);
-
-    // EventSource reconnects automatically; reflect status periodically
-    const statusTimer = setInterval(() => {
-      // If the page is visible and we have events, assume connected
-      if (!cancelled) setConnected(true);
-    }, 5000);
+    // لایه‌ی ۲: پولینگ پشتیبان
+    const pollTimer = setInterval(() => void refresh(), POLL_INTERVAL_MS);
 
     return () => {
-      cancelled = true;
+      clearTimeout(initialTimer);
       unsubscribe();
-      clearTimeout(connectTimer);
-      clearInterval(statusTimer);
+      clearInterval(pollTimer);
     };
-  }, []);
+  }, [refresh]);
 
   return (
     <Card>
@@ -68,7 +86,8 @@ export function ScanFeed() {
       <CardContent>
         {events.length === 0 ? (
           <p className="text-muted-foreground text-sm">
-            هنوز اسکن ثبت نشده است. اسکن‌ها اینجا لحظه‌ای نمایش داده می‌شوند.
+            هنوز اسکن ثبت نشده است. با اپ اسکنر (گوشی) بارکد را اسکن کنید؛
+            اینجا لحظه‌ای نمایش داده می‌شود.
           </p>
         ) : (
           <ul className="space-y-3">
@@ -84,6 +103,7 @@ export function ScanFeed() {
                   <div className="text-muted-foreground mt-0.5 text-xs" dir="ltr">
                     {event.barcode}
                     {event.userName ? ` · ${event.userName}` : ""}
+                    {event.device ? ` · ${event.device}` : ""}
                   </div>
                   <div className="text-muted-foreground mt-0.5 text-xs">
                     {timeAgo(event.createdAt)} · {formatDateTimeJalali(event.createdAt)}
@@ -94,7 +114,7 @@ export function ScanFeed() {
                     {SCAN_TYPE_LABELS[event.type]}
                   </Badge>
                   <span className="text-muted-foreground text-xs">
-                    {event.qty} عدد
+                    {toPersianDigits(event.qty)} عدد
                   </span>
                 </div>
               </li>

@@ -21,7 +21,24 @@ export const API_ROUTES = {
   reportsProfitLoss: "/api/reports/profit-loss",
   reportsSales: "/api/reports/sales",
   register: "/api/auth/register",
+  /** سلامت سرور + دیتابیس (بدون نیاز به نشست) */
+  health: "/api/health",
+  /**
+   * ورود اپ موبایل: برخلاف وب (که کوکی نشست می‌گیرد) یک توکن Bearer
+   * برمی‌گرداند، چون React Native کوکی ذخیره نمی‌کند.
+   */
+  mobileLogin: "/api/auth/mobile/login",
+  /** اعتبارسنجی توکن موبایل و گرفتن کاربر جاری */
+  mobileSession: "/api/auth/mobile/session",
 } as const;
+
+/**
+ * نام کوکی حامل توکن اپ موبایل در پلتفرم وب.
+ * پروکسی‌های پیش‌نمایش (e2b/arena) هدر `Authorization` را از درخواست حذف
+ * می‌کنند ولی کوکی را (مثل وب‌اپ) عبور می‌دهند؛ پس اپ وبِ موبایل توکن را
+ * هم در کوکی می‌گذارد. این کوکی با کوکی نشست Auth.js یکی نیست.
+ */
+export const MOBILE_TOKEN_COOKIE = "mystore_mobile_token";
 
 /** Roles, most privileged first. */
 export const ROLE_LEVEL: Record<string, number> = {

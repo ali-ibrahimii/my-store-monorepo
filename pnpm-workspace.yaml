@@ -1,5 +1,7 @@
 packages:
   - 'apps/*'
+  # اپ Expo ریشه‌اش یک پوشه پایین‌تر است (apps/mobile/src شامل app.json و app/ است)
+  - 'apps/mobile/src'
   - 'packages/*'
   - 'tooling/*'
 

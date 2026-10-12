@@ -12,6 +12,7 @@ import { auth } from "@/lib/auth";
 import { listInvoices, listProducts } from "@/lib/repositories";
 import { getSummary } from "@/lib/stats";
 import { StatCard } from "@/components/stat-card";
+import { ScanFeed } from "@/components/scan-feed";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@my-store/ui-kit";
 import {
   formatCurrency,
@@ -113,6 +114,9 @@ export default async function DashboardPage() {
           </Card>
         </Link>
       </div>
+
+      {/* فید زنده‌ی اسکن گوشی — لحظه‌ای از SSE به‌روز می‌شود */}
+      <ScanFeed />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

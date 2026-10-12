@@ -23,10 +23,49 @@ export interface RequestOptions {
   signal?: AbortSignal;
   /** Base URL — defaults to same-origin (browser) or NEXT_PUBLIC_APP_URL */
   baseUrl?: string;
+  /** Extra headers for this single request */
+  headers?: Record<string, string>;
+  /** Cookie policy — defaults to same-origin (omit when a bearer token is set) */
+  credentials?: "omit" | "same-origin" | "include";
+}
+
+// ------------------------------------------------------------
+// Global client configuration
+//
+// مرورگر (وب‌اپ) نیازی به تنظیم ندارد: همان origin و کوکی نشست.
+// اپ موبایل کوکی ندارد، بنابراین یک توکن Bearer می‌فرستد و آدرس سرور
+// را هم خودش مشخص می‌کند. به‌جای اینکه هر تابع یک آرگومان اضافه بگیرد،
+// یک‌بار در شروع اپ `configureApiClient()` صدا زده می‌شود.
+// ------------------------------------------------------------
+
+export interface ApiClientConfig {
+  /** Base URL prepended to every path. Empty string = same origin. */
+  baseUrl?: string;
+  /** Called on every request; returns the bearer token when signed in. */
+  getToken?: () => string | null | undefined;
+  /** Headers added to every request. */
+  headers?: Record<string, string>;
+  /** Cookie policy; defaults to same-origin (omit when a token is set). */
+  credentials?: RequestOptions["credentials"];
+}
+
+let clientConfig: ApiClientConfig = {};
+
+export function configureApiClient(config: ApiClientConfig): void {
+  clientConfig = { ...clientConfig, ...config };
+}
+
+export function getApiClientConfig(): ApiClientConfig {
+  return clientConfig;
+}
+
+/** فقط برای تست — پیکربندی سراسری را برمی‌گرداند به حالت اولیه. */
+export function resetApiClient(): void {
+  clientConfig = {};
 }
 
 function resolveBaseUrl(explicit?: string): string {
-  if (explicit) return explicit.replace(/\/$/, "");
+  if (explicit !== undefined) return explicit.replace(/\/$/, "");
   if (typeof window !== "undefined") return "";
   return (
     process.env.NEXT_PUBLIC_APP_URL ??
@@ -39,23 +78,45 @@ export async function apiRequest<T = unknown>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { method = "GET", body, query, signal, baseUrl } = options;
+  const { method = "GET", body, query, signal } = options;
+  const baseUrl = resolveBaseUrl(options.baseUrl ?? clientConfig.baseUrl);
+  const token = clientConfig.getToken?.() ?? null;
 
-  const url = new URL(path, resolveBaseUrl(baseUrl) || "http://localhost");
+  // برای ساختن query string یک base موقت لازم است، ولی اگر base واقعاً
+  // خالی باشد (حالت مرورگر / پیش‌نمایش) باید همان آدرس relative را
+  // fetch کنیم تا درخواست هم‌ریشه بماند — وگرنه `new URL(..., "http://localhost")`
+  // آدرس مطلق localhost می‌سازد و مرورگر به جای سرور، به کامپیوتر خود
+  // کاربر درخواست می‌فرستد («Failed to fetch»).
+  const url = new URL(path, baseUrl || "http://localhost");
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined) url.searchParams.set(key, String(value));
     }
   }
 
-  const response = await fetch(url.toString(), {
+  // [وب] توکن را در query string هم بگذاریم.
+  // چرا؟ پروکسی پیش‌نمایش هدر Authorization را حذف می‌کند و مرورگر در
+  // iframe کراس‑origin کوکی شخص‑ثالث را هم بلاک می‌کند؛ تنها حاملی که از
+  // هر دو مطمئن عبور می‌کند query است. پروکسی dev آن را به هدر داخلی
+  // `x-mystore-token` تبدیل می‌کند (native اصلاً به این نیاز ندارد).
+  if (token && typeof window !== "undefined") {
+    url.searchParams.set("mstore_token", token);
+  }
+  const finalUrl = baseUrl ? url.toString() : url.pathname + url.search;
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    ...(clientConfig.headers ?? {}),
+    ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers ?? {}),
+  };
+
+  const response = await fetch(finalUrl, {
     method,
     signal,
-    credentials: "same-origin",
-    headers: {
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      Accept: "application/json",
-    },
+    credentials: options.credentials ?? clientConfig.credentials ?? "same-origin",
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
