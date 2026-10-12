@@ -21,6 +21,15 @@ export const API_ROUTES = {
   reportsProfitLoss: "/api/reports/profit-loss",
   reportsSales: "/api/reports/sales",
   register: "/api/auth/register",
+  /** سلامت سرور + دیتابیس (بدون نیاز به نشست) */
+  health: "/api/health",
+  /**
+   * ورود اپ موبایل: برخلاف وب (که کوکی نشست می‌گیرد) یک توکن Bearer
+   * برمی‌گرداند، چون React Native کوکی ذخیره نمی‌کند.
+   */
+  mobileLogin: "/api/auth/mobile/login",
+  /** اعتبارسنجی توکن موبایل و گرفتن کاربر جاری */
+  mobileSession: "/api/auth/mobile/session",
 } as const;
 
 /** Roles, most privileged first. */

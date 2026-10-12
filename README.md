@@ -5,7 +5,7 @@
 
 - **وب‌اپ:** Next.js 16 (App Router) + React 19 + NextAuth v5 + Tailwind 4
 - **دیتابیس:** **MongoDB** با درایور رسمی `mongodb` (بدون ORM، بدون مرحله‌ی generate)
-- **موبایل:** اسکلت Expo (هنوز به دیتابیس وصل نیست)
+- **موبایل:** Expo SDK 57 + Expo Router — وصل به همان API وب‌اپ (ورود با توکن Bearer)
 - **رابط کاربری:** فارسی و راست‌به‌چپ
 
 > **می‌خواهی MongoDB را یاد بگیری؟**
@@ -53,11 +53,69 @@ pnpm dev           # ترمینال ۲ — وب‌اپ (می‌بیند دیتا
 
 ---
 
+## اپ موبایل (Expo)
+
+اپ موبایل **به همان API وب‌اپ وصل است** (دیتابیس و منطق کسب‌وکار جدا ندارد).
+کد آن در `apps/mobile/src` است (Expo Router).
+
+### اجرا
+
+```bash
+pnpm dev          # ترمینال ۱ — وب‌اپ/API روی :3000 (دیتابیس و seed هم خودش)
+pnpm dev:mobile   # ترمینال ۲ — اپ موبایل روی http://localhost:8081
+```
+
+> `pnpm dev` با turbo هم وب‌اپ و هم موبایل را بالا می‌آورد؛ اگر فقط موبایل را
+> می‌خواهید، `pnpm dev:mobile` را کنار `pnpm dev:web` اجرا کنید.
+
+`pnpm dev:mobile` دو چیز را اجرا می‌کند:
+
+1. **Metro** روی پورت `8082` (باندل React Native/وب)
+2. یک **پروکسی** روی پورت `8081` که `/api/**` را به وب‌اپ (`:3000`) می‌برد و
+   بقیه را به Metro. چون درخواست‌ها هم‌ریشه (same-origin) می‌شوند، نه CORS
+   مشکل می‌شود و نه نیاز است آدرس `localhost` را داخل کد بنویسیم.
+
+### ورود
+
+صفحه‌ی ورود را باز کنید (<http://localhost:8081/login>) و همان حساب‌های نمونه را
+بزنید: `owner@mystore.ir` / `123456`.
+
+تفاوتش با وب: وب با **کوکی نشست** Auth.js کار می‌کند، ولی React Native کوکی
+نگه نمی‌دارد. پس موبایل `POST /api/auth/mobile/login` را صدا می‌زند و یک
+**توکن Bearer** می‌گیرد (۳۰ روز اعتبار) که در AsyncStorage ذخیره می‌شود و در هر
+درخواست با هدر `Authorization: Bearer <token>` می‌رود. توکن با همان
+`AUTH_SECRET` و همان کتابخانه‌ی Auth.js ساخته/خوانده می‌شود (با salt جدا از
+کوکی نشست وب)، و `requireStoreUser()` در API هر دو راه را قبول می‌کند.
+
+### صفحه‌ها
+
+| تب | محتوا |
+|---|---|
+| `امروز` | خلاصه‌ی مالی (فروش/هزینه/سود/ارزش انبار/کم‌موجودی) از `/api/reports/summary` |
+| `فاکتورها` | لیست فاکتورها با فیلتر وضعیت از `/api/invoices` |
+| `اسکن` | جست‌وجوی بارکد + ثبت رویداد اسکن (فروش/شمارش/ورود/خروج/اصلاح) + فید آخرین اسکن‌ها |
+| `پروفایل` | کاربر جاری، نقش، وضعیت سرور/دیتابیس (`/api/health`) و خروج |
+
+### روی گوشی واقعی
+
+اپ باید بتواند به سرور برسد، پس آدرس API را بدهید (آی‌پی ماشین شما در همان
+شبکه‌ی وای‌فای):
+
+```bash
+EXPO_PUBLIC_API_URL=http://192.168.1.10:3000 pnpm dev:mobile
+# بعد با Expo Go یا build توسعه، همان آدرس را اسکن/وارد کنید
+```
+
+در حالت وب این متغیر لازم نیست (خالی = همان origin، یعنی همان پروکسی `:8081`).
+
+---
+
 ## دستورها
 
 | دستور | کار |
 |---|---|
-| `pnpm dev` | اجرای همه‌ی اپ‌ها با turbo |
+| `pnpm dev` | اجرای همه‌ی اپ‌ها با turbo (وب‌اپ + موبایل) |
+| `pnpm dev:web` / `pnpm dev:mobile` | فقط وب‌اپ / فقط اپ موبایل |
 | `pnpm build` | بیلد پروداکشن |
 | `pnpm lint` / `pnpm type-check` | ESLint / TypeScript |
 | `pnpm db:sandbox` | سرور MongoDB-سازگارِ توسعه (در حافظه، بدون نصب) — `pnpm dev` خودش این را بالا می‌آورد |
@@ -130,7 +188,7 @@ cp apps/web/.env.example apps/web/.env.local
 ```
 apps/
   web/            # Next.js 16 — وب‌اپ اصلی (صفحه‌ها + API routes)
-  mobile/         # Expo — اسکلت اپ موبایل
+  mobile/src/     # Expo Router — اپ موبایل (ریشه‌ی اپ همان src است)
 packages/
   shared-types/   # تایپ‌های مشترک (DTOها، نقش‌ها، وضعیت فاکتور، …)
   shared-utils/   # توابع کمکی (formatMoney، slugify، …)
@@ -176,7 +234,9 @@ docs/
 `/api/products`، `/api/products/[id]`، `/api/products/lookup`، `/api/categories`،
 `/api/customers`، `/api/invoices`، `/api/invoices/[id]`، `/api/invoices/[id]/payments`،
 `/api/expenses`، `/api/expense-categories`، `/api/scan`، `/api/scan/stream` (SSE)،
-`/api/reports/{summary,profit-loss,sales}`، `/api/auth/register`.
+`/api/reports/{summary,profit-loss,sales}`، `/api/auth/register`،
+`/api/auth/mobile/login` (توکن Bearer برای اپ موبایل)، `/api/auth/mobile/session`،
+`/api/health`.
 
 **قراردادها:**
 
@@ -186,6 +246,9 @@ docs/
 - **چندفروشگاهی:** هر کوئری با `storeId` محدود می‌شود؛ نقش‌ها `OWNER` / `ACCOUNTANT` / `CASHIER`.
 - خطاهای اعتبارسنجی `400`، تداخل یکتایی `409`، بدون نشست `401`، بدون دسترسی `403`.
 - ورودی‌ها با **zod** اعتبارسنجی می‌شوند.
+- **دو راه احراز هویت:** کوکی نشست Auth.js (وب) یا هدر
+  `Authorization: Bearer <token>` (موبایل). هر دو در `requireStoreUser()`
+  بررسی می‌شوند، پس routeها نیازی به تغییر ندارند.
 
 ---
 

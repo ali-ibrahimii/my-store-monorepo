@@ -44,3 +44,17 @@ export interface LoginInput {
   email: string;
   password: string;
 }
+
+/**
+ * پاسخ `POST /api/auth/mobile/login`.
+ *
+ * وب با کوکی نشست کار می‌کند، ولی React Native کوکی ذخیره نمی‌کند؛
+ * برای همین اپ موبایل یک توکن Bearer می‌گیرد و در هر درخواست
+ * `Authorization: Bearer <token>` می‌فرستد.
+ */
+export interface MobileSession {
+  token: string;
+  user: SessionUser;
+  /** ISO timestamp — زمان انقضای توکن */
+  expiresAt: string;
+}

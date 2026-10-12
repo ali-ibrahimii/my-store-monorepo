@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { parseBearerToken, readMobileToken } from "@/lib/mobile-token";
 import { hasRole } from "@my-store/shared-utils";
 import type { Role, SessionUser } from "@my-store/shared-types";
 
@@ -18,24 +20,41 @@ export function handleRouteError(error: unknown) {
 /**
  * Resolve the current session user (with role + storeId).
  * Returns `{ user: null, response }` when unauthenticated/forbidden.
+ *
+ * دو راه احراز هویت پشتیبانی می‌شود:
+ *   ۱) کوکی نشست Auth.js — همان چیزی که وب‌اپ می‌فرستد
+ *   ۲) هدر `Authorization: Bearer <token>` — همان چیزی که اپ موبایل
+ *      می‌فرستد (React Native کوکی ذخیره نمی‌کند)
+ * بقیه‌ی routeها هیچ تغییری لازم ندارند: همه از همین تابع استفاده می‌کنند.
  */
 export async function requireStoreUser(minRole?: Role) {
   const session = await auth();
   const raw = session?.user;
-  if (!raw?.id || !raw.storeId) {
+
+  let user: SessionUser | null = null;
+
+  if (raw?.id && raw.storeId) {
+    user = {
+      id: raw.id,
+      email: raw.email ?? "",
+      name: raw.name ?? null,
+      role: (raw.role as Role) ?? "CASHIER",
+      storeId: raw.storeId,
+    };
+  } else {
+    // بدون کوکی نشست → توکن Bearer موبایل را امتحان می‌کنیم.
+    // (هدر از `next/headers` خوانده می‌شود تا هیچ route ای نیاز به تغییر نداشته باشد.)
+    const headerList = await headers().catch(() => null);
+    const token = parseBearerToken(headerList?.get("authorization") ?? null);
+    if (token) user = await readMobileToken(token);
+  }
+
+  if (!user) {
     return {
       user: null,
       response: jsonError(401, "لطفاً وارد حساب کاربری شوید"),
     } as const;
   }
-
-  const user: SessionUser = {
-    id: raw.id,
-    email: raw.email ?? "",
-    name: raw.name ?? null,
-    role: (raw.role as Role) ?? "CASHIER",
-    storeId: raw.storeId,
-  };
 
   if (minRole && !hasRole(user.role, minRole)) {
     return {

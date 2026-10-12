@@ -1,0 +1,198 @@
+// ============================================================
+// نگه‌داری وضعیت ورود (Auth) در اپ موبایل
+//
+// تفاوتش با وب: اینجا کوکی نداریم. توکن را در AsyncStorage
+// (روی گوشی: Keychain/SharedPreferences، روی وب: localStorage)
+// نگه می‌داریم و در هر درخواست `Authorization: Bearer <token>` می‌فرستیم.
+//
+// جریان:
+//   ۱) موقع باز شدن اپ، توکن ذخیره‌شده خوانده می‌شود
+//   ۲) با GET /api/auth/mobile/session اعتبارش بررسی می‌شود
+//   ۳) معتبر → تب‌ها؛ نامعتبر/نبود → صفحه‌ی ورود
+// ============================================================
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { LoginInput, RegisterInput, SessionUser } from "@my-store/shared-types";
+import {
+  describeApiError,
+  fetchSession,
+  initApiClient,
+  isUnauthorized,
+  login as apiLogin,
+  register as apiRegister,
+} from "./api";
+
+const STORAGE_KEY = "my-store.auth.v1";
+
+export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
+
+export interface AuthContextValue {
+  status: AuthStatus;
+  token: string | null;
+  user: SessionUser | null;
+  signIn: (input: LoginInput) => Promise<void>;
+  signUp: (input: RegisterInput) => Promise<void>;
+  signOut: () => Promise<void>;
+  /** وقتی یک درخواست ۴۰۱ داد، اپ را به صفحه‌ی ورود برمی‌گردانیم */
+  handleAuthError: (error: unknown) => boolean;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+interface StoredAuth {
+  token: string;
+  user: SessionUser;
+}
+
+function parseStored(raw: string | null): StoredAuth | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<StoredAuth>;
+    if (!value?.token || !value?.user?.id || !value?.user?.storeId) return null;
+    return { token: value.token, user: value.user as SessionUser };
+  } catch {
+    return null;
+  }
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [status, setStatus] = useState<AuthStatus>("loading");
+
+  // api-client به یک تابع همگام نیاز دارد؛ توکن را در ref نگه می‌داریم
+  const tokenRef = useRef<string | null>(null);
+  initApiClient(() => tokenRef.current);
+
+  const persist = useCallback(async (value: StoredAuth | null) => {
+    try {
+      if (value) await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+      else await AsyncStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // اگر ذخیره‌سازی در دسترس نبود، حداقل در حافظه کار می‌کند
+    }
+  }, []);
+
+  const applySession = useCallback(
+    async (value: StoredAuth) => {
+      tokenRef.current = value.token;
+      setToken(value.token);
+      setUser(value.user);
+      setStatus("authenticated");
+      await persist(value);
+    },
+    [persist],
+  );
+
+  const clearSession = useCallback(async () => {
+    tokenRef.current = null;
+    setToken(null);
+    setUser(null);
+    setStatus("unauthenticated");
+    await persist(null);
+  }, [persist]);
+
+  // ---- bootstrap: خواندن توکن ذخیره‌شده و اعتبارسنجی آن ----
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      let stored: StoredAuth | null = null;
+      try {
+        stored = parseStored(await AsyncStorage.getItem(STORAGE_KEY));
+      } catch {
+        stored = null;
+      }
+      if (cancelled) return;
+
+      if (!stored) {
+        setStatus("unauthenticated");
+        return;
+      }
+
+      // تا وقتی اعتبار توکن را نمی‌دانیم، کاربر را «وارد شده» نشان می‌دهیم
+      // تا چشمک نزند؛ اگر ۴۰۱ شد همان لحظه به ورود می‌رود.
+      tokenRef.current = stored.token;
+      setToken(stored.token);
+      setUser(stored.user);
+      setStatus("authenticated");
+
+      try {
+        const { user: fresh } = await fetchSession();
+        if (cancelled) return;
+        setUser(fresh);
+        await persist({ token: stored.token, user: fresh });
+      } catch (error) {
+        if (cancelled) return;
+        if (isUnauthorized(error)) {
+          await clearSession();
+        }
+        // خطای شبکه: کاربر واردشده می‌ماند تا آفلاین هم UI را ببیند
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clearSession, persist]);
+
+  const signIn = useCallback(
+    async ({ email, password }: LoginInput) => {
+      const session = await apiLogin({
+        email: email.trim(),
+        password,
+      });
+      await applySession({ token: session.token, user: session.user });
+    },
+    [applySession],
+  );
+
+  const signUp = useCallback(
+    async (input: RegisterInput) => {
+      await apiRegister(input);
+      // بعد از ثبت‌نام، مستقیم وارد می‌شویم
+      const session = await apiLogin({ email: input.email, password: input.password });
+      await applySession({ token: session.token, user: session.user });
+    },
+    [applySession],
+  );
+
+  const signOut = useCallback(async () => {
+    await clearSession();
+  }, [clearSession]);
+
+  /** اگر خطا ۴۰۱ بود نشست را پاک می‌کند و `true` برمی‌گرداند. */
+  const handleAuthError = useCallback(
+    (error: unknown): boolean => {
+      if (!isUnauthorized(error)) return false;
+      void clearSession();
+      return true;
+    },
+    [clearSession],
+  );
+
+  const value = useMemo<AuthContextValue>(
+    () => ({ status, token, user, signIn, signUp, signOut, handleAuthError }),
+    [status, token, user, signIn, signUp, signOut, handleAuthError],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth(): AuthContextValue {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error("useAuth باید داخل AuthProvider استفاده شود");
+  return context;
+}
+
+/** پیام خطای آماده‌ی نمایش برای صفحه‌های ورود/ثبت‌نام */
+export { describeApiError };

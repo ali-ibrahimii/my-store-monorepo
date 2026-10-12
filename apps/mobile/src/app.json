@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "فروشگاه من",
+    "slug": "my-store-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "mystore",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "backgroundColor": "#f8fafc",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ir.mystore.mobile"
+    },
+    "android": {
+      "package": "ir.mystore.mobile",
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
