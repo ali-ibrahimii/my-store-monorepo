@@ -50,7 +50,13 @@ function forward(req, res, origin) {
   delete headers.origin;
 
   const upstream = http.request(target, { method: req.method, headers }, (upstreamRes) => {
-    res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers);
+    const outHeaders = { ...upstreamRes.headers };
+    // HTML هرگز کش نشود تا iframe/مرورگر همیشه باندل تازه بگیرد
+    if (String(outHeaders["content-type"] ?? "").includes("text/html")) {
+      outHeaders["cache-control"] = "no-store, no-cache, must-revalidate";
+      outHeaders.pragma = "no-cache";
+    }
+    res.writeHead(upstreamRes.statusCode ?? 502, outHeaders);
     upstreamRes.pipe(res);
   });
 

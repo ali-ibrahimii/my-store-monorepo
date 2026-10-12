@@ -46,7 +46,14 @@ export async function requireStoreUser(minRole?: Role) {
     // (هدر از `next/headers` خوانده می‌شود تا هیچ route ای نیاز به تغییر نداشته باشد.)
     const headerList = await headers().catch(() => null);
     const token = parseBearerToken(headerList?.get("authorization") ?? null);
-    if (token) user = await readMobileToken(token);
+    if (token) {
+      user = await readMobileToken(token);
+      // [debug] برای عیب‌یابی پرش به ورود: توکن هست ولی نامعتبر/منقضی؟
+      if (!user) console.warn("[auth] 401: bearer token فرستاده شد ولی نامعتبر/منقضی بود");
+    } else {
+      // [debug] آیا کلاینت اصلاً هدر Authorization را فرستاده؟
+      console.warn("[auth] 401: نه کوکی نشست هست نه هدر Authorization");
+    }
   }
 
   if (!user) {

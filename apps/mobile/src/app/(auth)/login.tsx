@@ -50,6 +50,10 @@ export default function LoginScreen() {
     }
   }
 
+  const debug = (
+    globalThis as unknown as { __MYSTORE_DEBUG__?: { bundle: string; last: unknown } } | undefined
+  )?.__MYSTORE_DEBUG__;
+
   return (
     <Screen>
       <View style={styles.hero}>
@@ -97,6 +101,13 @@ export default function LoginScreen() {
         <Text style={styles.hint}>cashier@mystore.ir / 123456 — فقط صندوق</Text>
         <Text style={styles.hintMuted}>سرور API: {describeApiBase()}</Text>
       </Card>
+
+      {/* [debug موقت] نسخه‌ی باندل در حال اجرا و آخرین درخواست API */}
+      <Text style={styles.debug} numberOfLines={3}>
+        {debug
+          ? JSON.stringify(debug)
+          : "debug: هیچ درخواست API از این باندل ثبت نشده (bundle قدیمی؟ دکمه‌ی رفرش پیش‌نمایش را بزنید)"}
+      </Text>
     </Screen>
   );
 }
@@ -111,4 +122,11 @@ const styles = StyleSheet.create({
   hintTitle: { fontSize: 13, fontWeight: "700", color: colors.text, textAlign: "right" },
   hint: { fontSize: 13, color: colors.muted, textAlign: "right", lineHeight: 20 },
   hintMuted: { fontSize: 12, color: colors.muted, textAlign: "right", marginTop: 4, opacity: 0.8 },
+  debug: {
+    fontSize: 10,
+    color: colors.muted,
+    textAlign: "left",
+    opacity: 0.7,
+    fontFamily: "monospace",
+  },
 });
