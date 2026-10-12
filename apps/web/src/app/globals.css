@@ -167,3 +167,51 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ============================================================
+   چاپ برچسب بارکد (تب «بارکدها» → چاپ برچسب)
+   ------------------------------------------------------------
+   هنگام چاپ فقط ناحیه‌ی `.print-area` دیده می‌شود؛ بقیه‌ی داشبورد
+   (سایدبار، سرصفحه، دکمه‌ها) پنهان می‌شوند. اندازه‌ها میلی‌متری‌اند تا
+   برچسب‌ها روی کاغذ برچسب A4 درست بنشینند.
+   ============================================================ */
+@media print {
+  @page {
+    size: A4;
+    margin: 8mm;
+  }
+
+  /* هر چیزی که لازم نیست چاپ شود */
+  .no-print,
+  [data-sidebar="sidebar"],
+  [data-sidebar="trigger"] {
+    display: none !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+
+  .print-area {
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 2mm !important;
+    background: #fff !important;
+  }
+
+  /* برچسب نصفه بین دو صفحه نیفتد */
+  .barcode-label {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border-color: #d4d4d4 !important;
+  }
+}

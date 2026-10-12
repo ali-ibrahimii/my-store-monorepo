@@ -34,7 +34,8 @@ export interface Product {
 
 export interface CreateProductInput {
   name: string;
-  barcode: string;
+  /** اگر خالی/نگذاشته شود، سرور یک بارکد EAN-13 یکتا می‌سازد. */
+  barcode?: string;
   sku?: string;
   description?: string;
   costPrice: number;

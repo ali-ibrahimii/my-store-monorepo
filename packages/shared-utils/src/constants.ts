@@ -10,6 +10,8 @@ export const DEFAULT_CURRENCY = "IRR";
 export const API_ROUTES = {
   products: "/api/products",
   productLookup: "/api/products/lookup",
+  /** ساخت/ثبت بارکد محصولات (تب «بارکدها») */
+  barcodes: "/api/barcodes",
   categories: "/api/categories",
   customers: "/api/customers",
   invoices: "/api/invoices",

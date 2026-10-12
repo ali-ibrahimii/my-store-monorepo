@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@my-store/ui-kit/components/card";
-import { toPersianDigits } from "@my-store/shared-utils";
+import { storeCodeFromId, toPersianDigits } from "@my-store/shared-utils";
 
 import { PageHeader } from "@/components/page-header";
 import { ProductForm } from "@/components/product-form";
@@ -69,11 +69,15 @@ export default async function ProductsPage() {
           <CardHeader>
             <CardTitle>افزودن محصول</CardTitle>
             <CardDescription>
-              بارکد را دقیق وارد کنید؛ اسکنر موبایل همین بارکد را می‌خواند.
+              بارکد دستی وارد کن یا خالی بگذار تا خودکار ساخته شود؛ برای ساخت دسته‌جمعی و
+              چاپ برچسب، تب «بارکدها» را ببین.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ProductForm categories={categories} />
+            <ProductForm
+              categories={categories}
+              storeCode={storeCodeFromId(storeId)}
+            />
           </CardContent>
         </Card>
       </div>

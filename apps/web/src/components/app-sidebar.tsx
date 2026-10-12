@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Barcode,
   LayoutDashboard,
   Package,
   Receipt,
@@ -40,6 +41,7 @@ type NavItem = {
 const mainNav: NavItem[] = [
   { href: "/dashboard", label: "داشبورد", icon: LayoutDashboard },
   { href: "/products", label: "محصولات", icon: Package },
+  { href: "/barcodes", label: "بارکدها", icon: Barcode },
   { href: "/scan", label: "اسکنر", icon: ScanLine },
   { href: "/customers", label: "مشتریان", icon: Users },
 ];

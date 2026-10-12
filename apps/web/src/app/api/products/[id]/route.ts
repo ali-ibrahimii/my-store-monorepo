@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { collections, idOf, idOrEmpty, oid } from "@/lib/db";
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
+import { generateUniqueBarcode } from "@/lib/barcode-service";
 import { mapCategories } from "@/lib/repositories";
 import { productDTO } from "@/lib/serialize";
 import { productSchema, normalizeBarcode } from "@my-store/shared-utils";
@@ -66,7 +67,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (data.categoryId !== undefined) update.categoryId = idOrEmpty(data.categoryId) || null;
 
     if (data.barcode !== undefined) {
-      const barcode = normalizeBarcode(data.barcode);
+      // بارکد خالی در ویرایش = «یک بارکد تازه بساز» (مثلاً قبلی گم/خراب شده)
+      const barcode =
+        normalizeBarcode(data.barcode) || (await generateUniqueBarcode(user.storeId));
       const clash = await products.findOne({ storeId: user.storeId, barcode });
       if (clash && idOf(clash._id) !== id) {
         return NextResponse.json(

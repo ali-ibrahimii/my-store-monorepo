@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { collections, idOf, idOrEmpty } from "@/lib/db";
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
+import { generateUniqueBarcode } from "@/lib/barcode-service";
 import { listProducts, mapCategories } from "@/lib/repositories";
 import { productDTO } from "@/lib/serialize";
 import { productSchema, normalizeBarcode } from "@my-store/shared-utils";
@@ -46,7 +47,11 @@ export async function POST(request: Request) {
     const data = parsed.data;
 
     const { products } = await collections();
-    const barcode = normalizeBarcode(data.barcode);
+    const provided = normalizeBarcode(data.barcode ?? "");
+
+    // بارکد خالی؟ خودمان یک EAN-13 معتبر و یکتا می‌سازیم
+    // («ثبت محصول جدید = بارکد خودکار»، هم از وب هم از موبایل).
+    const barcode = provided || (await generateUniqueBarcode(user.storeId));
 
     const exists = await products.findOne({ storeId: user.storeId, barcode });
     if (exists) {

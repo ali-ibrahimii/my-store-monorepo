@@ -20,6 +20,7 @@ import { ThemeToggle } from "./theme-toggle";
 const SECTION_LABELS: Record<string, string> = {
   dashboard: "داشبورد",
   products: "محصولات",
+  barcodes: "بارکدها",
   customers: "مشتریان",
   scan: "اسکنر",
   accounting: "فاکتورها",
@@ -31,6 +32,7 @@ const SECTION_LABELS: Record<string, string> = {
 const SEGMENT_HREF: Record<string, string> = {
   dashboard: "/dashboard",
   products: "/products",
+  barcodes: "/barcodes",
   customers: "/customers",
   scan: "/scan",
   accounting: "/accounting",

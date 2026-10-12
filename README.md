@@ -217,6 +217,7 @@ docs/
 | `ledger.ts` | سند‌های حسابداری بدهکار/بستانکار |
 | `invoice-service.ts` | صدور فاکتور، پرداخت، لغو، اثر روی موجودی و بدهی مشتری |
 | `scan-service.ts` | پردازش رویداد اسکن بارکد |
+| `barcode-service.ts` | ساخت بارکد EAN-13 یکتا برای فروشگاه + ثبت روی محصول |
 | `auth.ts` | NextAuth با provider اعتبارنامه‌ای و نقش‌ها |
 
 ### صفحه‌ها
@@ -227,6 +228,7 @@ docs/
 | `/login` · `/register` | ورود و ثبت‌نام فروشگاه جدید |
 | `/dashboard` | آمار امروز/ماه، ارزش انبار، کم‌موجودی‌ها |
 | `/products` | CRUD محصولات و دسته‌بندی‌ها |
+| `/barcodes` | **تب بارکدها:** ساخت EAN-13 برای محصولات بی‌بارکد، تولید به تعداد دلخواه، ثبت روی محصول و **چاپ برچسب** |
 | `/customers` | CRUD مشتریان و مانده‌حساب |
 | `/accounting` | لیست فاکتورها + ساخت فاکتور |
 | `/accounting/invoices/[id]` | جزئیات فاکتور، ثبت پرداخت، تغییر وضعیت/لغو |
@@ -283,7 +285,8 @@ packages/ui-kit/src/
 `GET/POST/PATCH/DELETE` روی:
 `/api/products`، `/api/products/[id]`، `/api/products/lookup`، `/api/categories`،
 `/api/customers`، `/api/invoices`، `/api/invoices/[id]`، `/api/invoices/[id]/payments`،
-`/api/expenses`، `/api/expense-categories`، `/api/scan`، `/api/scan/stream` (SSE)،
+`/api/expenses`، `/api/expense-categories`، `/api/barcodes` (ساخت/ثبت بارکد)،
+`/api/scan`، `/api/scan/stream` (SSE)،
 `/api/reports/{summary,profit-loss,sales}`، `/api/auth/register`،
 `/api/auth/mobile/login` (توکن Bearer برای اپ موبایل)، `/api/auth/mobile/session`،
 `/api/health`.
@@ -312,6 +315,15 @@ packages/ui-kit/src/
 - **اسکن بارکد:** `SALE` / `COUNT` / `CHECK_IN` (ورود کالا، افزایش موجودی) /
   `CHECK_OUT` (خروج، کاهش) / `ADJUSTMENT`.
   بارکد ناشناخته هم ذخیره می‌شود (با `productId: null`) تا بعداً به محصول وصل شود.
+- **بارکد:** هر بارکد ساخته‌شده یک **EAN-13 واقعی** است — `۶۲۸` (کد ایران) + کد
+  ۳ رقمی فروشگاه + شماره‌ی ۶ رقمی کالا + **رقم کنترلی محاسبه‌شده**؛ یعنی
+  بارکدخوان دستگاهی و اپ اسکنر آن را می‌خوانند.
+  - **ثبت محصول جدید:** اگر کادر بارکد را خالی بگذاری، خود سرور یک EAN-13
+    یکتا می‌سازد (هم از وب، هم از API موبایل).
+  - **تب «بارکدها»:** برای محصولات قدیمی/بدون بارکد دسته‌جمعی کد بساز
+    (`action: fill-missing`)، به تعداد دلخواه کد تازه بگیر (`action: generate`)
+    و روی محصولات بگذار (`action: assign`) — و برچسب چاپ کن (اندازه‌های
+    میلی‌متری آماده‌ی چاپ: ۳۴×۲۲، ۴۸×۳۰، ۶۳×۳۸).
 - **دفتر کل** همیشه باید متوازن باشد: مجموع بدهکار == مجموع بستانکار.
 
 ---
