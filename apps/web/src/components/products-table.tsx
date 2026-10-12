@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { PackageSearch, Search } from "lucide-react";
+import Link from "next/link";
+import { PackagePlus, PackageSearch, Printer, Search } from "lucide-react";
 
 import { Badge } from "@my-store/ui-kit/components/badge";
+import { Button } from "@my-store/ui-kit/components/button";
 import {
   Empty,
   EmptyDescription,
@@ -109,6 +111,7 @@ export function ProductsTable({ products }: { products: ProductRow[] }) {
                 <TableHead>قیمت خرید</TableHead>
                 <TableHead>قیمت فروش</TableHead>
                 <TableHead className="w-40">موجودی</TableHead>
+                <TableHead className="w-28">برچسب</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -122,7 +125,11 @@ export function ProductsTable({ products }: { products: ProductRow[] }) {
                   <TableRow key={product.id}>
                     <TableCell className="font-medium">{product.name}</TableCell>
                     <TableCell dir="ltr" className="text-muted-foreground text-xs">
-                      {product.barcode}
+                      {product.barcode.trim() ? (
+                        product.barcode
+                      ) : (
+                        <Badge variant="warning">بدون بارکد</Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {product.categoryName ?? "—"}
@@ -140,6 +147,18 @@ export function ProductsTable({ products }: { products: ProductRow[] }) {
                           {toPersianDigits(product.stock)}
                         </Badge>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href={`/barcodes?product=${product.id}`}>
+                          {product.barcode.trim() ? (
+                            <Printer className="size-4" />
+                          ) : (
+                            <PackagePlus />
+                          )}
+                          {product.barcode.trim() ? "چاپ" : "ساخت"}
+                        </Link>
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );

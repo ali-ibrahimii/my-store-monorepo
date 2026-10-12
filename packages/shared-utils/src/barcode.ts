@@ -76,6 +76,91 @@ export function normalizeForLookup(raw: string): string | null {
   return null;
 }
 
+// ============================================================
+// تولید بارکد (Barcode generation)
+//
+// فروشگاه‌های کوچک معمولاً بارکد آماده‌ی محصولات فله/بسته‌بندی‌شده‌ی خودشان را
+// ندارند. این‌جا یک EAN-13 استاندارد و «معتبر» می‌سازیم که:
+//   - رقم کنترلی‌اش درست است (اسکنر واقعی آن را می‌خواند)،
+//   - با پیشوند ۶۲۸ (کد کشور ایران در GS1) شروع می‌شود،
+//   - سه رقم بعدی «کد فروشگاه» است تا بارکدهای هر فروشگاه قابل تفکیک باشند.
+//
+// ساختار ۱۳ رقمی: ۶۲۸ + کد فروشگاه (۳ رقم) + سریال کالا (۶ رقم) + رقم کنترلی
+// ============================================================
+
+/** پیشوند GS1 ایران (کد کشور) */
+export const GS1_IRAN_PREFIX = "628";
+
+/** فقط رقم‌ها را نگه می‌دارد و به طول دلخواه می‌برد/pad می‌کند */
+function digitsOnly(raw: unknown, length: number): string {
+  return String(raw ?? "")
+    .replace(/\D/g, "")
+    .slice(0, length)
+    .padStart(length, "0");
+}
+
+/** ۱۲ رقم بدنه‌ی EAN-13 را به کد کامل ۱۳ رقمی (با رقم کنترلی) تبدیل می‌کند. */
+export function ean13WithCheckDigit(body12: string): string {
+  const body = digitsOnly(body12, 12);
+  return `${body}${gsanCheckDigit(`${body}0`)}`;
+}
+
+/** کد سه‌رقمی پایدار برای هر فروشگاه (۱۰۰ تا ۹۹۹) — از شناسه‌ی فروشگاه ساخته می‌شود. */
+export function storeCodeFromId(storeId: string): string {
+  let hash = 0;
+  for (let i = 0; i < storeId.length; i++) {
+    hash = (hash * 31 + storeId.charCodeAt(i)) % 1_000_003;
+  }
+  return String(100 + (hash % 900));
+}
+
+export interface GenerateEan13Options {
+  /** پیشوند GS1 — پیش‌فرض ۶۲۸ (ایران) */
+  prefix?: string;
+  /** کد فروشگاه (۳ رقم) — از `storeCodeFromId()` بگیرید */
+  storeCode?: string;
+  /** شماره‌ی سریال ۶ رقمی؛ اگر ندهید تصادفی تولید می‌شود */
+  serial?: number;
+  /** مولد عدد تصادفی — برای تست‌های قطعی */
+  random?: () => number;
+}
+
+/**
+ * ساخت یک بارکد EAN-13 معتبر.
+ * خروجی همیشه ۱۳ رقم و «قابل اسکن» است (رقم کنترلی محاسبه‌شده).
+ */
+export function generateEan13(options: GenerateEan13Options = {}): string {
+  const prefix = digitsOnly(options.prefix ?? GS1_IRAN_PREFIX, 3);
+  const storeCode = digitsOnly(options.storeCode ?? "0", 3).padStart(3, "0");
+  const random = options.random ?? Math.random;
+  const serial =
+    options.serial !== undefined
+      ? Math.abs(Math.trunc(options.serial)) % 1_000_000
+      : Math.floor(random() * 1_000_000);
+  return ean13WithCheckDigit(`${prefix}${storeCode}${String(serial).padStart(6, "0")}`);
+}
+
+/** چند بارکد پشت‌سرهم (برای «تولید به اندازه‌ی محصولات»). */
+export function generateEan13Batch(count: number, options: GenerateEan13Options = {}): string[] {
+  const total = Math.max(0, Math.min(500, Math.trunc(count) || 0));
+  const random = options.random ?? Math.random;
+  const codes = new Set<string>();
+  // اگر سریال دستی داده نشده، هر بار تصادفی است؛ ولی برای اطمینان
+  // از تکراری‌نشدن داخل همین دسته، تا رسیدن به تعداد دلخواه تلاش می‌کنیم.
+  let guard = total * 20 + 100;
+  while (codes.size < total && guard-- > 0) {
+    const code = generateEan13({ ...options, random });
+    codes.add(code);
+  }
+  return [...codes];
+}
+
+/** بارکد خالی/نال؟ (یعنی محصول هنوز بارکد ندارد و باید بسازیم) */
+export function isBlankBarcode(value: string | null | undefined): boolean {
+  const code = normalizeBarcode(value ?? "");
+  return code.length === 0 || code === "NONE" || code === "NO-BARCODE";
+}
+
 /** Human-readable label for a format. */
 export function barcodeFormatLabel(format: BarcodeFormat): string {
   switch (format) {

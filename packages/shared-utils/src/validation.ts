@@ -12,7 +12,11 @@ export const barcodeSchema = z
 
 export const productSchema = z.object({
   name: z.string().min(2, "نام محصول را وارد کنید"),
-  barcode: barcodeSchema,
+  /**
+   * بارکد اختیاری است: اگر خالی بماند، سرور خودش یک EAN-13 معتبر و یکتا
+   * می‌سازد (تب «بارکدها» هم همان کار را برای محصولات قدیمی می‌کند).
+   */
+  barcode: z.union([barcodeSchema, z.literal("")]).optional(),
   sku: z.string().trim().optional().or(z.literal("")),
   description: z.string().trim().optional().or(z.literal("")),
   costPrice: z.coerce.number().min(0, "قیمت خرید نمی‌تواند منفی باشد"),

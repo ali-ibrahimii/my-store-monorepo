@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, FolderPlus, PackagePlus } from "lucide-react";
+import { AlertCircle, FolderPlus, PackagePlus, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { createCategory, createProduct } from "@my-store/api-client";
@@ -20,6 +20,7 @@ import {
 } from "@my-store/ui-kit/components/dialog";
 import {
   Field,
+  FieldDescription,
   FieldGroup,
   FieldLabel,
 } from "@my-store/ui-kit/components/field";
@@ -32,19 +33,30 @@ import {
   SelectValue,
 } from "@my-store/ui-kit/components/select";
 import { Spinner } from "@my-store/ui-kit/components/spinner";
+import {
+  detectBarcodeFormat,
+  generateEan13,
+  toPersianDigits,
+} from "@my-store/shared-utils";
 import type { Category } from "@my-store/shared-types";
+
+import { BarcodeImage } from "./barcode-image";
 
 interface ProductFormProps {
   categories: Pick<Category, "id" | "name">[];
+  /** کد ۳ رقمی فروشگاه — برای ساخت بارکد EAN-13 هم‌سبک با تب «بارکدها» */
+  storeCode?: string;
 }
 
-export function ProductForm({ categories }: ProductFormProps) {
+export function ProductForm({ categories, storeCode = "100" }: ProductFormProps) {
   const router = useRouter();
   const formRef = React.useRef<HTMLFormElement>(null);
 
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [categoryId, setCategoryId] = React.useState("");
+  // بارکد می‌تواند خالی بماند؛ در آن صورت سرور خودش EAN-13 می‌سازد.
+  const [barcode, setBarcode] = React.useState("");
 
   const [categoryOpen, setCategoryOpen] = React.useState(false);
   const [newCategory, setNewCategory] = React.useState("");
@@ -59,7 +71,7 @@ export function ProductForm({ categories }: ProductFormProps) {
       const form = new FormData(event.currentTarget);
       await createProduct({
         name: String(form.get("name") ?? ""),
-        barcode: String(form.get("barcode") ?? ""),
+        barcode: barcode.trim(),
         sku: String(form.get("sku") ?? ""),
         description: String(form.get("description") ?? ""),
         costPrice: Number(form.get("costPrice") ?? 0),
@@ -70,6 +82,7 @@ export function ProductForm({ categories }: ProductFormProps) {
       });
       formRef.current?.reset();
       setCategoryId("");
+      setBarcode("");
       toast.success("محصول ثبت شد");
       router.refresh();
     } catch (e) {
@@ -104,14 +117,41 @@ export function ProductForm({ categories }: ProductFormProps) {
           <Input id="name" name="name" required placeholder="مثلاً شیر ۱ لیتری" />
         </Field>
         <Field>
-          <FieldLabel htmlFor="barcode">بارکد (EAN-13 / UPC / Code128) *</FieldLabel>
-          <Input
-            id="barcode"
-            name="barcode"
-            required
-            dir="ltr"
-            placeholder="6281234567890"
-          />
+          <FieldLabel htmlFor="barcode">بارکد (EAN-13 / UPC / Code128)</FieldLabel>
+          <div className="flex items-center gap-2">
+            <Input
+              id="barcode"
+              name="barcode"
+              dir="ltr"
+              placeholder="خالی بگذار تا خودکار ساخته شود"
+              value={barcode}
+              onChange={(event) => setBarcode(event.target.value)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              title="ساخت بارکد جدید"
+              onClick={() => setBarcode(generateEan13({ storeCode }))}
+            >
+              <Wand2 className="size-4" />
+            </Button>
+          </div>
+          <FieldDescription>
+            {barcode.trim()
+              ? detectBarcodeFormat(barcode.trim()) === "UNKNOWN"
+                ? "این کد استاندارد نیست؛ ولی می‌توانی همان را ثبت کنی."
+                : "این بارکد استاندارد است و اسکنر آن را می‌خواند."
+              : `اختیاری — اگر خالی بگذاری، سیستم یک EAN-13 با پیشوند ایران و کد فروشگاه ${toPersianDigits(storeCode)} می‌سازد.`}
+          </FieldDescription>
+          {barcode.trim() && barcode.trim().length >= 4 ? (
+            <BarcodeImage
+              value={barcode.trim()}
+              height={40}
+              fontSize={12}
+              className="rounded-md border p-2"
+            />
+          ) : null}
         </Field>
         <Field>
           <FieldLabel htmlFor="sku">کد SKU</FieldLabel>

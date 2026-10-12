@@ -53,6 +53,35 @@ export function lookupByBarcode(barcode: string): Promise<{
   return apiGet(API_ROUTES.productLookup, { barcode });
 }
 
+// ------------------------------------------------------------
+// بارکدها — ساخت و ثبت روی محصولات (تب «بارکدها» در وب)
+// ------------------------------------------------------------
+
+/** چند بارکد EAN-13 تازه بساز (فقط نمایش/چاپ — هنوز روی محصولی ثبت نشده) */
+export function generateBarcodes(input: {
+  count: number;
+  prefix?: string;
+}): Promise<{ codes: string[] }> {
+  return apiPost(API_ROUTES.barcodes, { action: "generate", ...input });
+}
+
+/** برای محصولات بدون بارکد، خودکار بساز و ثبت کن */
+export function fillMissingBarcodes(productIds?: string[]): Promise<BarcodeAssignResult> {
+  return apiPost(API_ROUTES.barcodes, { action: "fill-missing", productIds });
+}
+
+/** بارکدها را روی محصولات بگذار (بارکد خالی = خودت بساز) */
+export function assignBarcodes(
+  items: { productId: string; barcode?: string }[],
+): Promise<BarcodeAssignResult> {
+  return apiPost(API_ROUTES.barcodes, { action: "assign", items });
+}
+
+export interface BarcodeAssignResult {
+  assigned: { productId: string; barcode: string }[];
+  failed: { productId: string; error?: string }[];
+}
+
 export function listCategories(): Promise<Category[]> {
   return apiGet(API_ROUTES.categories);
 }
