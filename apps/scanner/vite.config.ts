@@ -34,6 +34,9 @@ function tokenQueryToHeader(): Plugin {
 
 export default defineConfig({
   plugins: [tokenQueryToHeader(), react(), tailwindcss()],
+  define: {
+    __API_ORIGIN__: JSON.stringify(API_ORIGIN),
+  },
   server: {
     host: "0.0.0.0",
     port: 5173,

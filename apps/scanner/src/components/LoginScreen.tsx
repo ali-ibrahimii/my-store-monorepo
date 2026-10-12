@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { AlertCircle, ScanLine } from "lucide-react";
 
 import { Alert, AlertDescription } from "@my-store/ui-kit/components/alert";
@@ -12,10 +12,45 @@ import {
 import { Input } from "@my-store/ui-kit/components/input";
 import { Separator } from "@my-store/ui-kit/components/separator";
 import { Spinner } from "@my-store/ui-kit/components/spinner";
-import { apiPost } from "@my-store/api-client";
+import { ApiError, apiGet, apiPost } from "@my-store/api-client";
 import { API_ROUTES } from "@my-store/shared-utils";
 import type { MobileSession } from "@my-store/shared-types";
 import { apiBaseUrlLabel, saveSession } from "../lib/api";
+
+interface HealthResponse {
+  ok?: boolean;
+  error?: string;
+  database?: { hint?: string };
+}
+
+function apiErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const body = error.data as HealthResponse | null;
+    if (error.status === 503 && body?.database?.hint) {
+      return body.database.hint;
+    }
+    if (error.status >= 500) {
+      const detail = body?.error || error.message;
+      return `${detail} (HTTP ${error.status}). لاگ ترمینال وب‌اپ را برای خطای [mobile-auth] ببینید؛ آدرس API فعلی: ${apiBaseUrlLabel()}.`;
+    }
+    return error.message || `خطای سرور (${error.status})`;
+  }
+
+  if (error instanceof SyntaxError) {
+    return `پاسخ سرور API معتبر نیست. وب‌اپ را با «pnpm dev:web» اجرا کنید و پورت مقصد را بررسی کنید: ${apiBaseUrlLabel()}.`;
+  }
+
+  if (error instanceof Error) {
+    if (
+      /failed to fetch|network request failed|networkerror/i.test(error.message)
+    ) {
+      return `وب‌اپ/API در دسترس نیست. وب‌اپ را با «pnpm dev:web» اجرا کنید. آدرس API فعلی: ${apiBaseUrlLabel()}.`;
+    }
+    return error.message || "خطای ناشناخته";
+  }
+
+  return "ارتباط با وب‌اپ/API برقرار نشد.";
+}
 
 interface LoginScreenProps {
   onLoggedIn: (session: MobileSession) => void;
@@ -26,6 +61,25 @@ export function LoginScreen({ onLoggedIn }: LoginScreenProps) {
   const [password, setPassword] = useState("123456");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [serverWarning, setServerWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGet<HealthResponse>(API_ROUTES.health)
+      .then((health) => {
+        if (!cancelled && health.ok === false) {
+          setServerWarning(
+            "دیتابیس در دسترس نیست؛ وب‌اپ را با «pnpm dev:web» اجرا کنید.",
+          );
+        }
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) setServerWarning(apiErrorMessage(cause));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -39,7 +93,8 @@ export function LoginScreen({ onLoggedIn }: LoginScreenProps) {
       saveSession(session);
       onLoggedIn(session);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "ورود ناموفق بود");
+      console.error("[scanner] login failed:", err);
+      setError(apiErrorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -85,6 +140,13 @@ export function LoginScreen({ onLoggedIn }: LoginScreenProps) {
                 />
               </Field>
             </FieldGroup>
+
+            {serverWarning && !error ? (
+              <Alert variant="destructive">
+                <AlertCircle className="size-4" />
+                <AlertDescription>{serverWarning}</AlertDescription>
+              </Alert>
+            ) : null}
 
             {error ? (
               <Alert variant="destructive">
