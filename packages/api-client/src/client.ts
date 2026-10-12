@@ -82,12 +82,18 @@ export async function apiRequest<T = unknown>(
   const baseUrl = resolveBaseUrl(options.baseUrl ?? clientConfig.baseUrl);
   const token = clientConfig.getToken?.() ?? null;
 
+  // برای ساختن query string یک base موقت لازم است، ولی اگر base واقعاً
+  // خالی باشد (حالت مرورگر / پیش‌نمایش) باید همان آدرس relative را
+  // fetch کنیم تا درخواست هم‌ریشه بماند — وگرنه `new URL(..., "http://localhost")`
+  // آدرس مطلق localhost می‌سازد و مرورگر به جای سرور، به کامپیوتر خود
+  // کاربر درخواست می‌فرستد («Failed to fetch»).
   const url = new URL(path, baseUrl || "http://localhost");
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined) url.searchParams.set(key, String(value));
     }
   }
+  const finalUrl = baseUrl ? url.toString() : url.pathname + url.search;
 
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -97,7 +103,7 @@ export async function apiRequest<T = unknown>(
     ...(options.headers ?? {}),
   };
 
-  const response = await fetch(url.toString(), {
+  const response = await fetch(finalUrl, {
     method,
     signal,
     credentials: options.credentials ?? clientConfig.credentials ?? (token ? "omit" : "same-origin"),

@@ -90,9 +90,13 @@ export function describeApiError(error: unknown): string {
 
   if (error instanceof Error) {
     const message = error.message ?? "";
-    // در React Native پیام fetch خام این است
-    if (message.includes("Network request failed")) {
-      return `به سرور نرسیدیم (${describeApiBase()}). مطمئن شوید وب‌اپ بالاست و گوشی و سرور به یک شبکه وصل‌اند.`;
+    // پیام خام fetch وقتی اصلاً به سرور نرسیم (React Native: Network request failed،
+    // مرورگر: Failed to fetch)
+    if (message.includes("Network request failed") || message.includes("Failed to fetch")) {
+      return (
+        `ارتباط با سرور برقرار نشد (${describeApiBase()}). ` +
+        "مطمئن شوید وب‌اپ با «pnpm dev» بالا است و آدرس API درست تنظیم شده."
+      );
     }
     return message || "خطای ناشناخته";
   }
