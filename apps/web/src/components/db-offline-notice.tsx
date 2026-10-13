@@ -31,12 +31,13 @@ export function DbOfflineNotice({ detail }: { detail?: string }) {
           <AlertDescription>
             <p>۱. در SQL Editor سوپابیس فایل supabase/migrations/0001_init.sql را اجرا کنید.</p>
             <p>
-              ۲. در apps/web/.env.local مقدار NEXT_PUBLIC_SUPABASE_URL، NEXT_PUBLIC_SUPABASE_ANON_KEY
-              و SUPABASE_SERVICE_ROLE_KEY را بگذارید.
+              ۲. در apps/web/.env.local مقدار NEXT_PUBLIC_SUPABASE_URL، کلید
+              publishable (NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) و کلید
+              محرمانه‌ی سرور (SUPABASE_SECRET_KEY) را بگذارید. کلیدهای قدیمی
+              anon و service_role هم پشتیبانی می‌شوند؛ کلید secret را در مرورگر
+              قرار ندهید.
             </p>
-            <p>
-              ۳. <code dir="ltr">pnpm db:seed</code> حساب مدیر و صندوق‌دار نمونه را می‌سازد.
-            </p>
+            <p>۳. <code dir="ltr">pnpm db:seed</code> حساب مدیر و صندوق‌دار نمونه را می‌سازد.</p>
           </AlertDescription>
         </Alert>
         {detail ? (
