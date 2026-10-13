@@ -20,7 +20,7 @@ export async function GET() {
           error: result.error,
           hint: isSupabaseConfigured()
             ? "اسکیما را از supabase/migrations/0001_init.sql در SQL Editor سوپابیس اجرا کنید، بعد pnpm db:seed."
-            : "apps/web/.env.local را با NEXT_PUBLIC_SUPABASE_URL و کلیدها پر کنید.",
+            : "apps/web/.env.local را با NEXT_PUBLIC_SUPABASE_URL، کلید publishable و کلید محرمانه‌ی سرور پر کنید.",
         },
     latencyMs: Date.now() - started,
     time: new Date().toISOString(),

@@ -67,8 +67,10 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const anon =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   const needsAuth = PROTECTED.some((prefix) => isPrefix(pathname, prefix));
   if (!url || !anon) {
     if (needsAuth) {

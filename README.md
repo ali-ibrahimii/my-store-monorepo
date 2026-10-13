@@ -12,7 +12,7 @@
 2. SQL Editor را باز کنید و کل فایل `supabase/migrations/0001_init.sql` را اجرا کنید.
 3. در Authentication → Providers ایمیل را روشن کنید و تأیید ایمیل را خاموش کنید تا ورود همان لحظه کار کند.
 4. در Authentication → Settings مدت JWT را اگر خواستید طولانی‌تر کنید (پیش‌فرض یک ساعت است).
-5. از Project Settings → API این سه مقدار را در `apps/web/.env.local` بگذارید:
+5. از Project Settings → API Keys آدرس و کلیدها را در `apps/web/.env.local` بگذارید:
 
 ```bash
 cp apps/web/.env.example apps/web/.env.local
@@ -21,8 +21,10 @@ cp apps/web/.env.example apps/web/.env.local
 | متغیر | توضیح |
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | آدرس پروژه |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | کلید anon |
-| `SUPABASE_SERVICE_ROLE_KEY` | کلید service role — فقط سرور؛ در مرورگر نگذارید |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | کلید publishable برای ورود و دسترسی مرورگر |
+| `SUPABASE_SECRET_KEY` | کلید محرمانه‌ی سرور برای API و seed؛ هرگز با `NEXT_PUBLIC_` تعریف نکنید یا در مرورگر نگذارید |
+
+نام‌های قدیمی `NEXT_PUBLIC_SUPABASE_ANON_KEY` و `SUPABASE_SERVICE_ROLE_KEY` هم پشتیبانی می‌شوند. کلید publishable جای کلید secret/service role را نمی‌گیرد.
 
 6. داده و حساب نمونه:
 

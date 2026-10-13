@@ -7,11 +7,19 @@ export function supabaseUrl(): string {
 }
 
 export function supabaseAnonKey(): string {
-  return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? "";
+  return (
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
+    ""
+  );
 }
 
 export function supabaseServiceKey(): string {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "";
+  return (
+    process.env.SUPABASE_SECRET_KEY?.trim() ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
+    ""
+  );
 }
 
 function isPlaceholder(value: string): boolean {
@@ -19,7 +27,9 @@ function isPlaceholder(value: string): boolean {
     !value ||
     value.includes("YOUR_PROJECT") ||
     value.includes("your-anon-key") ||
+    value.includes("your-publishable-key") ||
     value.includes("your-service-role-key") ||
+    value.includes("your-secret-key") ||
     value === "change-me"
   );
 }
@@ -35,8 +45,10 @@ export function isSupabaseConfigured(): boolean {
 export function missingSupabaseMessage(): string {
   return (
     "اتصال سوپابیس کامل نیست. در apps/web/.env.local مقدار واقعی " +
-    "NEXT_PUBLIC_SUPABASE_URL و NEXT_PUBLIC_SUPABASE_ANON_KEY و SUPABASE_SERVICE_ROLE_KEY را بگذارید، " +
-    "بعد اسکیما را از supabase/migrations/0001_init.sql در SQL Editor اجرا کنید."
+    "NEXT_PUBLIC_SUPABASE_URL، یکی از NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY یا NEXT_PUBLIC_SUPABASE_ANON_KEY، " +
+    "و یکی از SUPABASE_SECRET_KEY یا SUPABASE_SERVICE_ROLE_KEY را بگذارید. " +
+    "کلید secret/service role فقط برای سرور است و نباید NEXT_PUBLIC_ داشته باشد. " +
+    "سپس اسکیما را از supabase/migrations/0001_init.sql در SQL Editor اجرا کنید."
   );
 }
 
@@ -58,7 +70,7 @@ export function getAdmin(): SupabaseClient {
 }
 
 export function createAnonClient(): SupabaseClient {
-  if (!supabaseUrl() || !supabaseAnonKey()) {
+  if (isPlaceholder(supabaseUrl()) || isPlaceholder(supabaseAnonKey())) {
     throw new Error(missingSupabaseMessage());
   }
   return createClient(supabaseUrl(), supabaseAnonKey(), {
@@ -70,7 +82,7 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 /** کلاینت نشست کوکی برای Route Handler و Server Component. */
 export async function createSupabaseServer() {
-  if (!supabaseUrl() || !supabaseAnonKey()) {
+  if (isPlaceholder(supabaseUrl()) || isPlaceholder(supabaseAnonKey())) {
     throw new Error(missingSupabaseMessage());
   }
   const cookieStore = await cookies();

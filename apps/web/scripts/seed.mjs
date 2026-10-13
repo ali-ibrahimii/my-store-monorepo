@@ -33,10 +33,29 @@ function loadEnv() {
 
 loadEnv();
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!url || !key || url.includes("YOUR_PROJECT")) {
-  console.error("[seed] NEXT_PUBLIC_SUPABASE_URL و SUPABASE_SERVICE_ROLE_KEY را در apps/web/.env.local بگذارید.");
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
+const key =
+  process.env.SUPABASE_SECRET_KEY?.trim() ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
+  "";
+const isPlaceholder = (value) =>
+  !value ||
+  value.includes("YOUR_PROJECT") ||
+  value.includes("your-secret-key") ||
+  value.includes("your-service-role-key");
+
+if (isPlaceholder(url) || isPlaceholder(key)) {
+  console.error(
+    "[seed] برای اجرا، NEXT_PUBLIC_SUPABASE_URL و کلید محرمانه‌ی سرور را در apps/web/.env.local تنظیم کنید.",
+  );
+  if (isPlaceholder(key)) {
+    console.error(
+      "[seed] یکی از SUPABASE_SECRET_KEY (کلید جدید sb_secret_...) یا SUPABASE_SERVICE_ROLE_KEY (کلید قدیمی service_role) لازم است.",
+    );
+    console.error(
+      "[seed] NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY که برای مرورگر است جایگزین این کلید نمی‌شود؛ کلید محرمانه را در Dashboard سوپابیس بسازید و فقط روی سرور نگه دارید.",
+    );
+  }
   process.exit(1);
 }
 
