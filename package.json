@@ -9,6 +9,8 @@
     "dev:scanner": "pnpm --filter @my-store/scanner dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
+    "test": "turbo run test",
+    "verify": "pnpm type-check && pnpm lint && pnpm test",
     "type-check": "turbo run type-check",
     "db:seed": "pnpm --filter web db:seed"
   },

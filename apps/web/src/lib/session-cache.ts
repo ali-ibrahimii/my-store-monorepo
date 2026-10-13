@@ -59,13 +59,60 @@ export function invalidateCachedSession(key: string | null): void {
   if (key) store.delete(key);
 }
 
-/** پس از تغییر نقش/غیرفعال‌کردن کاربر: نشست‌های کش‌شده‌ی او را دور بریز. */
+/**
+ * کش «توکن تأییدشده» (مسیر اپ اسکنر).
+ *
+ * اپ گوشی با Bearer token می‌آید و هر اسکن/جست‌وجو/ثبت فاکتور یعنی یک
+ * رفت‌وبرگشت به سرور Auth. اینجا نتیجه‌ی تأییدشده ۳۰ ثانیه نگه داشته
+ * می‌شود تا اسکن‌های پشت‌سرهم سریع باشند. کلید کش، هش توکن است (خود
+ * توکن ذخیره نمی‌شود).
+ */
+export const TOKEN_CACHE_TTL_MS = 30_000;
+const TOKEN_CACHE_MAX = 500;
+
+const tokenStore = new Map<string, { userId: string; expiresAt: number }>();
+
+export async function hashToken(token: string): Promise<string> {
+  const bytes = new TextEncoder().encode(token);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export function getCachedTokenUser(hash: string): string | null {
+  const entry = tokenStore.get(hash);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    tokenStore.delete(hash);
+    return null;
+  }
+  return entry.userId;
+}
+
+export function setCachedTokenUser(hash: string, userId: string): void {
+  if (tokenStore.size >= TOKEN_CACHE_MAX) {
+    const oldest = tokenStore.keys().next().value;
+    if (oldest) tokenStore.delete(oldest);
+  }
+  tokenStore.set(hash, { userId, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS });
+}
+
+export function invalidateCachedToken(hash: string): void {
+  tokenStore.delete(hash);
+}
+
+/** پس از تغییر نقش/غیرفعال‌کردن کاربر: نشست‌ها و توکن‌های کش‌شده‌ی او را دور بریز. */
 export function invalidateSessionsForUser(userId: string): void {
   for (const [key, entry] of store) {
     if (entry.userId === userId) store.delete(key);
+  }
+  for (const [hash, entry] of tokenStore) {
+    if (entry.userId === userId) tokenStore.delete(hash);
   }
 }
 
 export function clearSessionCache(): void {
   store.clear();
+  tokenStore.clear();
 }

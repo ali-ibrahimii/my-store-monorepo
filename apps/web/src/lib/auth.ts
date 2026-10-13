@@ -3,7 +3,15 @@ import { redirect } from "next/navigation";
 
 import { cookies } from "next/headers";
 
-import { getCachedSession, sessionKeyFromCookies, setCachedSession } from "@/lib/session-cache";
+import {
+  getCachedSession,
+  getCachedTokenUser,
+  hashToken,
+  invalidateCachedToken,
+  sessionKeyFromCookies,
+  setCachedSession,
+  setCachedTokenUser,
+} from "@/lib/session-cache";
 import { assertData, createSupabaseServer, getAdmin, isSupabaseConfigured } from "@/lib/supabase";
 
 interface StoreNameJoin {
@@ -88,9 +96,23 @@ export function invalidateSessionUser(userId: string): void {
   profileCache.delete(userId);
 }
 
+/**
+ * کاربر از توکن Bearer (اپ اسکنر).
+ *
+ * هر اسکن = یک درخواست؛ اگر هر بار توکن را از سرور Auth بپرسیم، فروش
+ * با گوشی کند می‌شود. پس نتیجه‌ی تأییدشده ۳۰ ثانیه کش می‌شود.
+ */
 export async function userFromAccessToken(token: string): Promise<SessionUser | null> {
+  const hash = await hashToken(token);
+  const cachedUserId = getCachedTokenUser(hash);
+  if (cachedUserId) return loadSessionUser(cachedUserId);
+
   const { data, error } = await getAdmin().auth.getUser(token);
-  if (error || !data.user) return null;
+  if (error || !data.user) {
+    invalidateCachedToken(hash);
+    return null;
+  }
+  setCachedTokenUser(hash, data.user.id);
   return loadSessionUser(data.user.id);
 }
 

@@ -211,6 +211,51 @@ export function SetupStatusPanel() {
         </Card>
       ) : null}
 
+      <Card className="border-primary/30">
+        <CardHeader>
+          <CardTitle className="text-base">چیزهایی که فقط خودتان می‌توانید تنظیم کنید</CardTitle>
+          <CardDescription>
+            این سه مورد از داخل برنامه قابل بررسی نیست، ولی بیشترِ «کار نمی‌کند»ها
+            از همین‌هاست.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-xs leading-6">
+          <div className="flex gap-2">
+            <span className="text-primary font-semibold">۱)</span>
+            <p>
+              <strong>اپ اسکنر روی ورسل:</strong> متغیر{" "}
+              <code dir="ltr" className="bg-muted rounded px-1 font-mono">
+                VITE_API_URL
+              </code>{" "}
+              را دقیقاً روی آدرس همین وب‌اپ (با https، بدون اسلش انتهایی) بگذارید و
+              بعد Redeploy کنید؛ متغیرهای Vite در زمان بیلد خوانده می‌شوند. Root
+              Directory پروژه‌ی اسکنر هم باید{" "}
+              <code dir="ltr" className="bg-muted rounded px-1 font-mono">
+                apps/scanner
+              </code>{" "}
+              باشد.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <span className="text-primary font-semibold">۲)</span>
+            <p>
+              <strong>Deployment Protection:</strong> اگر لینک ورسل روی گوشی صفحه‌ی
+              «Log in to Vercel» نشان می‌دهد، در Vercel → Settings → Deployment
+              Protection آن را خاموش کنید (یا برای Production) و از دامنه‌ی اصلی
+              استفاده کنید.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <span className="text-primary font-semibold">۳)</span>
+            <p>
+              <strong>سرعت:</strong> در Vercel → Settings → Functions، ناحیه‌ی اجرا
+              (Region) را نزدیک ناحیه‌ی پروژه‌ی سوپابیس بگذارید؛ هر صفحه چند کوئری
+              به سوپابیس می‌زند و فاصله‌ی جغرافیایی مستقیم روی سرعت اثر دارد.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">فایل‌های SQL و مستندات</CardTitle>
