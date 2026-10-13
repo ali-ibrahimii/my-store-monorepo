@@ -19,6 +19,8 @@ export const API_ROUTES = {
   expenseCategories: "/api/expense-categories",
   scan: "/api/scan",
   scanStream: "/api/scan/stream",
+  /** وضعیت لحظه‌ای فروشگاه (فاکتورهای تازه + سبدهای در حال اسکن) */
+  live: "/api/live",
   reportsSummary: "/api/reports/summary",
   reportsProfitLoss: "/api/reports/profit-loss",
   reportsSales: "/api/reports/sales",
@@ -68,6 +70,18 @@ export const SCAN_TYPE_LABELS: Record<string, string> = {
   CHECK_IN: "ورود به انبار",
   CHECK_OUT: "خروج از انبار",
   ADJUSTMENT: "اصلاح",
+  /** اسکن داخل سبد فاکتور اپ گوشی */
+  CART: "سبد فاکتور",
+};
+
+/** برچسب کوتاه برای نشان‌های ریز */
+export const SCAN_TYPE_SHORT_LABELS: Record<string, string> = {
+  SALE: "فروش",
+  COUNT: "شمارش",
+  CHECK_IN: "ورود",
+  CHECK_OUT: "خروج",
+  ADJUSTMENT: "اصلاح",
+  CART: "اسکن گوشی",
 };
 
 export const INVOICE_STATUS_LABELS: Record<string, string> = {

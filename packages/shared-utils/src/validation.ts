@@ -112,7 +112,11 @@ export const expenseSchema = z.object({
 
 export const scanInputSchema = z.object({
   barcode: barcodeSchema,
-  type: z.enum(["SALE", "COUNT", "CHECK_IN", "CHECK_OUT", "ADJUSTMENT"]).optional(),
+  /**
+   * CART = اسکن داخل سبد فاکتور اپ گوشی.
+   * این نوع موجودی را عوض نمی‌کند؛ فقط برای همگام‌سازی لحظه‌ای با وب است.
+   */
+  type: z.enum(["SALE", "COUNT", "CHECK_IN", "CHECK_OUT", "ADJUSTMENT", "CART"]).optional(),
   qty: z.coerce.number().int().positive().optional(),
   device: z.string().trim().optional().or(z.literal("")),
   note: z.string().trim().optional().or(z.literal("")),

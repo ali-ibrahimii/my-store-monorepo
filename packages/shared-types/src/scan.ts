@@ -8,8 +8,19 @@ export const SCAN_TYPES = [
   "CHECK_IN",
   "CHECK_OUT",
   "ADJUSTMENT",
+  /** اسکن داخل «سبد فاکتور» اپ گوشی — موجودی را عوض نمی‌کند */
+  "CART",
 ] as const;
 export type ScanType = (typeof SCAN_TYPES)[number];
+
+/** نوع‌هایی که کاربر از منوی دستی انتخاب می‌کند (CART داخلی است). */
+export const MANUAL_SCAN_TYPES = [
+  "SALE",
+  "COUNT",
+  "CHECK_IN",
+  "CHECK_OUT",
+  "ADJUSTMENT",
+] as const satisfies readonly ScanType[];
 
 export interface ScanEvent {
   id: string;

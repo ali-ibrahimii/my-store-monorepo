@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Radio } from "lucide-react";
+import { Radio, Smartphone } from "lucide-react";
 
 import { Badge } from "@my-store/ui-kit/components/badge";
 import {
@@ -29,81 +29,29 @@ import {
 } from "@my-store/ui-kit/components/item";
 import { ScrollArea } from "@my-store/ui-kit/components/scroll-area";
 import { Skeleton } from "@my-store/ui-kit/components/skeleton";
+import { cn } from "@my-store/ui-kit/lib/utils";
 import {
   formatDateTimeJalali,
   SCAN_TYPE_LABELS,
   timeAgo,
   toPersianDigits,
 } from "@my-store/shared-utils";
-import { listScanEvents, subscribeToScans } from "@my-store/api-client";
-import type { ScanEvent } from "@my-store/shared-types";
-import { cn } from "@my-store/ui-kit/lib/utils";
 
-const MAX_ITEMS = 50;
-/** فاصله‌ی پولینگ پشتیبان — اگر SSE قطع شود چیزی از قلم نمی‌افتد. */
-const POLL_INTERVAL_MS = 15_000;
-
-/** ادغام رویدادها بر اساس id، جدیدترین اول. */
-function mergeEvents(fresh: ScanEvent[], prev: ScanEvent[]): ScanEvent[] {
-  const seen = new Set(fresh.map((e) => e.id));
-  const merged = [...fresh];
-  for (const event of prev) {
-    if (!seen.has(event.id)) merged.push(event);
-  }
-  merged.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return merged.slice(0, MAX_ITEMS);
-}
+import { useLiveStore } from "@/lib/live-client";
 
 /**
  * فید زنده‌ی رویدادهای اسکن.
  *
- * دو لایه دارد:
- *   ۱) SSE (`/api/scan/stream`) — لحظه‌ای، وقتی اتصال برقرار است
- *   ۲) پولینگ سبک هر ۱۵ ثانیه — روی سرورلس (Vercel) که عمر کانکشن
- *      محدود است، تضمین می‌کند هیچ اسکنی از قلم نیفتد
+ * منبع داده: سوپابیس Realtime (WebSocket). اگر فعال نباشد، پولینگ سبک
+ * هر ۳ ثانیه فقط «تازه‌ها» را می‌گیرد. روی ورسل (سرورلس) هم کار می‌کند،
+ * چون وضعیت از دیتابیس خوانده می‌شود، نه از حافظه‌ی یک پروسه.
  */
-export function ScanFeed() {
-  const [events, setEvents] = React.useState<ScanEvent[]>([]);
-  const [loaded, setLoaded] = React.useState(false);
-  const [connected, setConnected] = React.useState(false);
-  const seenIdsRef = React.useRef<Set<string>>(new Set());
+export function ScanFeed({ storeId }: { storeId: string }) {
+  const { scans, cart, status } = useLiveStore({ storeId, withScans: true });
+  const events = scans;
+  const loading = status === "connecting" && events.length === 0;
 
-  const refresh = React.useCallback(async () => {
-    try {
-      const page = await listScanEvents({ pageSize: 30 });
-      for (const event of page.items) seenIdsRef.current.add(event.id);
-      setEvents((prev) => mergeEvents(page.items, prev));
-    } catch {
-      // شبکه قطع است — دور بعدی دوباره تلاش می‌کند
-    } finally {
-      setLoaded(true);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    // بارگذاری اولیه (با تأخیر صفر تا setState همزمان داخل effect نباشد)
-    const initialTimer = setTimeout(() => void refresh(), 0);
-
-    // لایه‌ی ۱: SSE — رویدادها آنی می‌رسند
-    const unsubscribe = subscribeToScans(
-      (event) => {
-        if (seenIdsRef.current.has(event.id)) return;
-        seenIdsRef.current.add(event.id);
-        setEvents((prev) => mergeEvents([event], prev));
-        setConnected(true);
-      },
-      () => setConnected(false),
-    );
-
-    // لایه‌ی ۲: پولینگ پشتیبان
-    const pollTimer = setInterval(() => void refresh(), POLL_INTERVAL_MS);
-
-    return () => {
-      clearTimeout(initialTimer);
-      unsubscribe();
-      clearInterval(pollTimer);
-    };
-  }, [refresh]);
+  const connected = status === "realtime";
 
   return (
     <Card className="h-full">
@@ -123,8 +71,19 @@ export function ScanFeed() {
           اسکن‌های اپ گوشی لحظه‌ای اینجا نمایش داده می‌شوند.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        {!loaded ? (
+      <CardContent className="space-y-3">
+        {cart.length > 0 ? (
+          <div className="border-primary/40 bg-primary/5 flex flex-wrap items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-xs">
+            <Smartphone className="text-primary size-3.5" />
+            <span className="font-medium">سبد در حال اسکن روی گوشی:</span>
+            <span className="text-muted-foreground">
+              {toPersianDigits(cart.reduce((sum, line) => sum + line.qty, 0))} قلم
+              {cart[0]?.name ? ` — آخرین: ${cart[0].name}` : ""}
+            </span>
+          </div>
+        ) : null}
+
+        {loading ? (
           <div className="space-y-2">
             {Array.from({ length: 3 }).map((_, index) => (
               <Skeleton key={index} className="h-16 w-full rounded-md" />
@@ -149,7 +108,7 @@ export function ScanFeed() {
               {events.map((event) => (
                 <Item key={event.id} variant="outline" size="sm">
                   <ItemMedia variant="icon">
-                    <Radio />
+                    {event.type === "CART" ? <Smartphone /> : <Radio />}
                   </ItemMedia>
                   <ItemContent>
                     <ItemTitle>

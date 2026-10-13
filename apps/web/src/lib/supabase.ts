@@ -2,6 +2,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+import { isPlaceholderValue } from "./env-status";
+
 export function supabaseUrl(): string {
   return process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
 }
@@ -23,15 +25,7 @@ export function supabaseServiceKey(): string {
 }
 
 function isPlaceholder(value: string): boolean {
-  return (
-    !value ||
-    value.includes("YOUR_PROJECT") ||
-    value.includes("your-anon-key") ||
-    value.includes("your-publishable-key") ||
-    value.includes("your-service-role-key") ||
-    value.includes("your-secret-key") ||
-    value === "change-me"
-  );
+  return isPlaceholderValue(value);
 }
 
 export function isSupabaseConfigured(): boolean {

@@ -18,6 +18,8 @@ export interface SessionUser {
   email: string;
   role: Role;
   storeId: string;
+  /** نام فروشگاه — در همان کوئری پروفایل می‌آید (اختیاری) */
+  storeName?: string | null;
 }
 
 export interface Store {

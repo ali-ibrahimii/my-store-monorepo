@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { handleRouteError, jsonError, requireStoreUser } from "@/lib/api-helpers";
+import { invalidateSessionUser } from "@/lib/auth";
+import { invalidateSessionsForUser } from "@/lib/session-cache";
 import { getAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +32,10 @@ export async function PATCH(request: Request, context: RouteContext) {
       .maybeSingle();
     if (updated.error) return jsonError(400, updated.error.message);
     if (!updated.data) return jsonError(404, "صندوق‌دار یافت نشد");
+
+    // دسترسی‌های کش‌شده بلافاصله باطل شوند
+    invalidateSessionUser(id);
+    invalidateSessionsForUser(id);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return handleRouteError(error);

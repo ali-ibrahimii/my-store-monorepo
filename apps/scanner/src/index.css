@@ -179,4 +179,103 @@
   #scan-region__shade_region {
     border-color: rgba(56, 189, 248, 0.9) !important;
   }
+
+  /* جلوگیری از زوم دوضربه‌ای و انتخاب متن هنگام کار با اسکنر */
+  button,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
+/* ------------------------------------------------------------
+   نوار امن گوشی (نُچ/نوار خانه) و نوار متحرک اسکن
+   ------------------------------------------------------------ */
+@utility pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+@utility pt-safe {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+
+.scan-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: #0b1120;
+}
+
+.scan-line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: 2px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, transparent, #38bdf8, transparent);
+  box-shadow: 0 0 12px 2px rgba(56, 189, 248, 0.7);
+  animation: scan-sweep 2.2s ease-in-out infinite;
+}
+
+@keyframes scan-sweep {
+  0% {
+    top: 12%;
+    opacity: 0.15;
+  }
+  50% {
+    top: 86%;
+    opacity: 1;
+  }
+  100% {
+    top: 12%;
+    opacity: 0.15;
+  }
+}
+
+.scan-flash {
+  animation: scan-flash 480ms ease-out;
+}
+
+@keyframes scan-flash {
+  0% {
+    background: rgba(34, 197, 94, 0.55);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.sheet-up {
+  animation: sheet-up 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(6%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.pop-in {
+  animation: pop-in 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes pop-in {
+  from {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* اعداد هم‌عرض برای جمع‌ها */
+.tnum {
+  font-variant-numeric: tabular-nums;
 }
