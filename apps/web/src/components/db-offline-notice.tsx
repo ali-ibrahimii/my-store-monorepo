@@ -48,11 +48,16 @@ export function DbOfflineNotice({ detail }: { detail?: string }) {
             </pre>
           </>
         ) : null}
-        <Button asChild variant="outline" size="sm">
-          <Link href="/api/health" target="_blank">
-            بررسی وضعیت
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild size="sm">
+            <Link href="/setup">راه‌اندازی و عیب‌یابی</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/api/health" target="_blank">
+              بررسی وضعیت API
+            </Link>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

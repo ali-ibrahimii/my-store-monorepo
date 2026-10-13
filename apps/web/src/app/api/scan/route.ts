@@ -7,7 +7,8 @@ import { scanInputSchema } from "@my-store/shared-utils";
 
 export const dynamic = "force-dynamic";
 
-const CASHIER_TYPES = new Set(["SALE", "COUNT"]);
+/** صندوق‌دار: فروش، شمارش و اسکن داخل سبد فاکتور (CART) */
+const CASHIER_TYPES = new Set(["SALE", "COUNT", "CART"]);
 
 export async function GET(request: Request) {
   try {

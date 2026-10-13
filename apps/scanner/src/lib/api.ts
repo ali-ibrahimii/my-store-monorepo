@@ -1,19 +1,23 @@
 // ============================================================
 // لایه‌ی API اپ اسکنر
 //
-// این اپ «جدا» از وب‌اپ deploy می‌شود (مثلاً scan.vercel.app در برابر
-// app.vercel.app)؛ بنابراین آدرس API را از VITE_API_URL می‌گیرد.
+// این اپ جدا از وب‌اپ deploy می‌شود (مثلاً scan.example.com در برابر
+// app.example.com)؛ آدرس API را از VITE_API_URL می‌گیرد.
 // در توسعه همان origin است (پروکسی vite → :3000) تا CORS لازم نباشد.
 //
-// احراز هویت با توکن Bearer است (نه کوکی) — همان توکن موبایل که از
-// POST /api/auth/mobile/login گرفته می‌شود و در localStorage می‌ماند.
+// احراز هویت با توکن Bearer است (نه کوکی) — توکن از POST /api/auth/token
+// گرفته می‌شود و در localStorage می‌ماند.
 // ============================================================
 
 import { configureApiClient } from "@my-store/api-client";
 import type { MobileSession } from "@my-store/shared-types";
 
 const API_BASE_URL: string = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
-const STORAGE_KEY = "my-store.scanner.session.v1";
+const WEB_BASE_URL: string = (import.meta.env.VITE_WEB_URL ?? import.meta.env.VITE_API_URL ?? "").replace(
+  /\/$/,
+  "",
+);
+const STORAGE_KEY = "my-store.scanner.session.v2";
 
 let session: MobileSession | null = readSession();
 
@@ -24,7 +28,7 @@ configureApiClient({
 
 function readSession(): MobileSession | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem("my-store.scanner.session.v1");
     if (!raw) return null;
     const parsed = JSON.parse(raw) as MobileSession;
     if (!parsed?.token || !parsed?.user) return null;
@@ -52,7 +56,24 @@ export function clearSession(): void {
 /** آدرس API که اپ به آن وصل است (برای نمایش در صفحه‌ی ورود) */
 export function apiBaseUrlLabel(): string {
   if (API_BASE_URL) return API_BASE_URL;
-  return import.meta.env.DEV
-    ? `پروکسی توسعه → ${__API_ORIGIN__}`
-    : "همان دامنه";
+  return import.meta.env.DEV ? `پروکسی توسعه → ${__API_ORIGIN__}` : "همان دامنه";
+}
+
+/** آدرس صفحه‌ی فاکتور در پنل وب (برای چاپ روی لپ‌تاپ) */
+export function webInvoiceUrl(invoiceId: string): string | null {
+  const base = WEB_BASE_URL || (import.meta.env.DEV ? __API_ORIGIN__ : "");
+  if (!base) return null;
+  return `${base.replace(/\/$/, "")}/print/invoices/${invoiceId}`;
+}
+
+/** آدرس اپ وب (برای دکمه‌ی «پنل وب») */
+export function webAppUrl(path = ""): string | null {
+  const base = WEB_BASE_URL || (import.meta.env.DEV ? __API_ORIGIN__ : "");
+  if (!base) return null;
+  return `${base.replace(/\/$/, "")}${path}`;
+}
+
+/** دسترسی به توکن برای کارهای جانبی */
+export function currentToken(): string | null {
+  return session?.token ?? null;
 }

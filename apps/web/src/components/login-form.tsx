@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { AlertCircle, AlertTriangle, LogIn } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@my-store/ui-kit/components/alert";
@@ -13,7 +13,6 @@ import { Input } from "@my-store/ui-kit/components/input";
 import { Spinner } from "@my-store/ui-kit/components/spinner";
 
 export function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -57,8 +56,11 @@ export function LoginForm() {
         callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")
           ? callbackUrl
           : "/dashboard";
-      router.push(safeTarget);
-      router.refresh();
+      // یک ناوبری کامل: صفحه‌ی مقصد یک‌بار از سرور می‌آید و کوکی نشست تازه
+      // همان‌جا خوانده می‌شود. (جایگزین push + refresh که صفحه را دو بار
+      // می‌ساخت و ورود را کند می‌کرد.)
+      setBusy(true);
+      window.location.assign(safeTarget);
     } catch {
       setError("ارتباط با سرور برقرار نشد");
     } finally {
@@ -99,7 +101,15 @@ export function LoginForm() {
         <Alert>
           <AlertTriangle className="size-4" />
           <AlertTitle>سوپابیس وصل نیست</AlertTitle>
-          <AlertDescription>{dbWarning}</AlertDescription>
+          <AlertDescription>
+            <span className="block">{dbWarning}</span>
+            <Link
+              href="/setup"
+              className="text-primary mt-2 inline-block underline-offset-4 hover:underline"
+            >
+              صفحه‌ی راه‌اندازی و عیب‌یابی →
+            </Link>
+          </AlertDescription>
         </Alert>
       ) : null}
 

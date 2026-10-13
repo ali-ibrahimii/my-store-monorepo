@@ -43,9 +43,9 @@ import {
   SCAN_TYPE_LABELS,
   toPersianDigits,
 } from "@my-store/shared-utils";
-import type { Product, ScanEvent, ScanType } from "@my-store/shared-types";
+import { MANUAL_SCAN_TYPES, type Product, type ScanEvent, type ScanType } from "@my-store/shared-types";
 
-const SCAN_TYPES: ScanType[] = ["SALE", "CHECK_IN", "CHECK_OUT", "COUNT", "ADJUSTMENT"];
+const SCAN_TYPES: ScanType[] = [...MANUAL_SCAN_TYPES];
 const CASHIER_SCAN_TYPES: ScanType[] = ["SALE", "COUNT"];
 
 interface ScannerProps {

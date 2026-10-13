@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getCachedSession, setCachedSession, sessionKeyFromCookies } from "@/lib/session-cache";
+
 const PROTECTED = [
   "/dashboard",
   "/products",
@@ -97,9 +99,56 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const { data } = await supabase.auth.getUser();
-  const user = data.user;
-  const role = (user?.app_metadata?.role as string | undefined) ?? "";
+  // ------------------------------------------------------------------
+  // احراز هویت با کم‌ترین رفت‌وبرگشت ممکن:
+  //   getClaims() امضای JWT را محلی تأیید می‌کند (کلید نامتقارن) و فقط
+  //   وقتی نشست باید تازه شود به getUser() برمی‌گردیم.
+  // اینجا فقط «دروازه‌ی سریع» است؛ اجازه‌ی نهایی در layout و API انجام می‌شود.
+  // ------------------------------------------------------------------
+  const authApi = supabase.auth as unknown as {
+    getClaims?: () => Promise<{
+      data: { claims?: Record<string, unknown> } | null;
+      error: unknown;
+    }>;
+  };
+
+  // اگر همین نشست چند لحظه پیش تأیید شده، دوباره به سرور Auth نمی‌زنیم
+  const cacheKey = sessionKeyFromCookies(request.cookies.getAll());
+  const cachedSession = getCachedSession(cacheKey);
+
+  let userId: string | null = cachedSession?.userId ?? null;
+  let role =
+    (cachedSession?.claims.app_metadata as { role?: string } | undefined)?.role ??
+    (cachedSession?.claims.role as string | undefined) ??
+    "";
+
+  if (typeof authApi.getClaims === "function" && !userId) {
+    try {
+      const { data, error } = await authApi.getClaims();
+      if (!error && typeof data?.claims?.sub === "string") {
+        userId = data.claims.sub as string;
+        const metadata = data.claims.app_metadata as { role?: string } | undefined;
+        role = metadata?.role ?? (data.claims.role as string | undefined) ?? "";
+        setCachedSession(cacheKey, { userId, claims: data?.claims ?? {} });
+      }
+    } catch {
+      userId = null;
+    }
+  }
+
+  if (!userId) {
+    const { data } = await supabase.auth.getUser();
+    userId = data.user?.id ?? null;
+    role = (data.user?.app_metadata?.role as string | undefined) ?? "";
+    if (userId) {
+      setCachedSession(cacheKey, {
+        userId,
+        claims: { sub: userId, ...(data.user?.app_metadata ?? {}) },
+      });
+    }
+  }
+
+  const user = userId ? { id: userId } : null;
 
   if (needsAuth && !user) {
     const login = request.nextUrl.clone();

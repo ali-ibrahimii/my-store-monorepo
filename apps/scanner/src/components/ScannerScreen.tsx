@@ -2,119 +2,114 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Camera,
   CameraOff,
-  CheckCircle2,
   Flashlight,
   FlashlightOff,
-  Keyboard,
   LogOut,
-  Package,
-  PackageSearch,
+  PackagePlus,
+  RotateCcw,
   ScanLine,
+  ShoppingCart,
+  Store,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 
 import { Alert, AlertDescription } from "@my-store/ui-kit/components/alert";
 import { Badge } from "@my-store/ui-kit/components/badge";
 import { Button } from "@my-store/ui-kit/components/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@my-store/ui-kit/components/card";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@my-store/ui-kit/components/empty";
-import { Input } from "@my-store/ui-kit/components/input";
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemGroup,
-  ItemMedia,
-  ItemTitle,
-} from "@my-store/ui-kit/components/item";
-import { Separator } from "@my-store/ui-kit/components/separator";
 import { Spinner } from "@my-store/ui-kit/components/spinner";
-import { Tabs, TabsList, TabsTrigger } from "@my-store/ui-kit/components/tabs";
-import { lookupByBarcode, listScanEvents, recordScan } from "@my-store/api-client";
-import {
-  SCAN_TYPE_LABELS,
-  formatCurrency,
-  formatDateTimeJalali,
-  formatNumber,
-  normalizeBarcode,
-} from "@my-store/shared-utils";
-import type { MobileSession, ScanEvent, ScanType } from "@my-store/shared-types";
-import { clearSession } from "../lib/api";
+import { recordScan } from "@my-store/api-client";
+import { formatCurrency, normalizeBarcode, toPersianDigits } from "@my-store/shared-utils";
+import type { Invoice, MobileSession, Product } from "@my-store/shared-types";
 
-const SCAN_TYPES: ScanType[] = ["SALE", "CHECK_IN", "CHECK_OUT", "COUNT", "ADJUSTMENT"];
-const CASHIER_SCAN_TYPES: ScanType[] = ["SALE", "COUNT"];
+import { clearSession } from "../lib/api";
+import { useCart } from "../lib/cart";
+import { useCatalog } from "../lib/catalog";
+import { beepError, beepSuccess, vibrate } from "../lib/feedback";
+import { CartPanel } from "./CartPanel";
+import { CheckoutSheet } from "./CheckoutSheet";
+import { ProductPicker } from "./ProductPicker";
+import { SuccessView } from "./SuccessView";
 
 interface ScannerScreenProps {
   session: MobileSession;
   onLoggedOut: () => void;
 }
 
+type CameraState = "idle" | "starting" | "running" | "error";
+
+const DUPLICATE_WINDOW_MS = 1200;
+const LAST_SCAN_TIMEOUT_MS = 4000;
+
+/**
+ * صفحه‌ی اصلی اسکنر.
+ *
+ * جریان کار: بارکد ← افزودن به سبد ← (تکرار) ← «ثبت فاکتور» روی نوار پایین
+ * ← انتخاب روش پرداخت ← ثبت در سرور ← فاکتور در پنل وب (آماده‌ی چاپ).
+ */
 export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
-  const allowedTypes = session.user.role === "ADMIN" ? SCAN_TYPES : CASHIER_SCAN_TYPES;
+  const catalog = useCatalog();
+  const cart = useCart(session.user.id, catalog.taxRate);
+
   const regionRef = useRef<HTMLDivElement>(null);
   const qrRef = useRef<import("html5-qrcode").Html5Qrcode | null>(null);
   const lastCodeRef = useRef<{ code: string; at: number } | null>(null);
-  const typeRef = useRef<ScanType>("SALE");
-  const qtyRef = useRef(1);
+  const decodedHandlerRef = useRef<(text: string) => void>(() => {});
+  const lastScanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [running, setRunning] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [torch, setTorch] = useState(false);
-  const [torchSupported, setTorchSupported] = useState(false);
-  const [scanType, setScanType] = useState<ScanType>("SALE");
-  const [qty, setQty] = useState(1);
-  const [busy, setBusy] = useState(false);
-  const [last, setLast] = useState<{ event: ScanEvent; product: ScanEvent["product"] } | null>(null);
-  const [events, setEvents] = useState<ScanEvent[]>([]);
-  const [manualOpen, setManualOpen] = useState(false);
-  const [manualCode, setManualCode] = useState("");
+  const [cameraState, setCameraState] = useState<CameraState>("idle");
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [torchOn, setTorchOn] = useState(false);
+  const [torchAvailable, setTorchAvailable] = useState(false);
+  const [flash, setFlash] = useState(false);
+  const [lastScan, setLastScan] = useState<
+    { name: string; qty: number; price: number; productId: string } | null
+  >(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [online, setOnline] = useState(true);
 
   useEffect(() => {
-    typeRef.current = scanType;
-  }, [scanType]);
-  useEffect(() => {
-    qtyRef.current = qty;
-  }, [qty]);
-
-  // آخرین اسکن‌ها (اولیه)
-  useEffect(() => {
-    listScanEvents({ page: 1, pageSize: 10 })
-      .then((page) => setEvents(page.items))
-      .catch(() => {});
+    const update = () => setOnline(navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
   }, []);
 
-  const beep = useCallback(() => {
-    try {
-      const ctx = new AudioContext();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = 1200;
-      gain.gain.setValueAtTime(0.18, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.15);
-    } catch {
-      // صدا در دسترس نیست
-    }
+  const logout = useCallback(async () => {
+    clearSession();
+    onLoggedOut();
+  }, [onLoggedOut]);
+
+  /** ثبت رویداد اسکن در سرور تا وب‌پنل سبدِ در حال تکمیل را زنده ببیند */
+  const publishCartScan = useCallback(
+    (barcode: string, qty: number) => {
+      recordScan({ barcode, type: "CART", qty, device: "scanner-pwa" }).catch((error: unknown) => {
+        if (error instanceof Error && "status" in error && (error as { status?: number }).status === 401) {
+          void logout();
+        }
+      });
+    },
+    [logout],
+  );
+
+  const showLastScan = useCallback((product: Product, qty: number) => {
+    setLastScan({ name: product.name, qty, price: Number(product.salePrice), productId: product.id });
+    setFlash(true);
+    setTimeout(() => setFlash(false), 500);
+    if (lastScanTimerRef.current) clearTimeout(lastScanTimerRef.current);
+    lastScanTimerRef.current = setTimeout(() => setLastScan(null), LAST_SCAN_TIMEOUT_MS);
   }, []);
 
-  /** ثبت یک بارکد — دوربینی یا دستی. نتیجه فوراً ثبت و پخش می‌شود. */
-  const submitBarcode = useCallback(
+  const handleDecoded = useCallback(
     async (rawCode: string) => {
       const code = normalizeBarcode(rawCode);
       if (!code) return;
@@ -123,45 +118,62 @@ export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
       if (
         lastCodeRef.current &&
         lastCodeRef.current.code === code &&
-        now - lastCodeRef.current.at < 1500
+        now - lastCodeRef.current.at < DUPLICATE_WINDOW_MS
       ) {
-        return; // debounce — اسکنر پیوسته همان کد را می‌فرستد
+        return; // همان بارکد پشت‌سرهم خوانده شده — نادیده بگیر
       }
       lastCodeRef.current = { code, at: now };
 
-      beep();
-      if (navigator.vibrate) navigator.vibrate(60);
-
-      setBusy(true);
-      setError(null);
-      try {
-        const lookup = await lookupByBarcode(code);
-        const event = await recordScan({
-          barcode: code,
-          type: typeRef.current,
-          qty: qtyRef.current,
-          device: "scanner-pwa",
-        });
-        setLast({ event, product: lookup.found ? (lookup.product ?? null) : null });
-        setEvents((prev) => [event, ...prev.filter((e) => e.id !== event.id)].slice(0, 10));
-      } catch (err) {
-        if (err instanceof Error && "status" in err && (err as { status?: number }).status === 401) {
-          clearSession();
-          onLoggedOut();
-          return;
-        }
-        setError(err instanceof Error ? err.message : "خطا در ثبت اسکن");
-      } finally {
-        setBusy(false);
+      const product = await catalog.findByBarcode(code);
+      if (!product) {
+        beepError();
+        vibrate([70, 50, 70]);
+        setUnknownBarcode(code);
+        setPickerOpen(true);
+        return;
       }
+
+      beepSuccess();
+      vibrate(35);
+      cart.addProduct(product, 1);
+      showLastScan(product, 1);
+      publishCartScan(code, 1);
     },
-    [beep, onLoggedOut],
+    [cart, catalog, publishCartScan, showLastScan],
   );
 
-  const start = useCallback(async () => {
-    setError(null);
-    if (!regionRef.current || starting) return;
-    setStarting(true);
+  useEffect(() => {
+    decodedHandlerRef.current = (text: string) => {
+      void handleDecoded(text);
+    };
+  }, [handleDecoded]);
+
+  const stopCamera = useCallback(async () => {
+    const qr = qrRef.current;
+    qrRef.current = null;
+    if (qr) {
+      try {
+        await qr.stop();
+        qr.clear();
+      } catch {
+        // قبلاً متوقف شده
+      }
+    }
+    setCameraState("idle");
+    setTorchOn(false);
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    if (cameraState === "starting" || cameraState === "running") return;
+    if (!regionRef.current) return;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("دوربین فقط روی HTTPS کار می‌کند. آدرس سایت را با https باز کنید.");
+      setCameraState("error");
+      return;
+    }
+
+    setCameraState("starting");
+    setCameraError(null);
     try {
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
       const qr = new Html5Qrcode(regionRef.current.id, {
@@ -180,293 +192,347 @@ export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
       });
       qrRef.current = qr;
 
+      const width = regionRef.current.clientWidth || 320;
+      const box = Math.round(Math.min(width * 0.78, 300));
+
       await qr.start(
         { facingMode: "environment" },
-        { fps: 12, qrbox: { width: 240, height: 240 }, aspectRatio: 1 },
-        (decodedText) => {
-          void submitBarcode(decodedText);
+        {
+          fps: 15,
+          qrbox: { width: box, height: Math.round(box * 0.62) },
+          aspectRatio: 1.1,
+          disableFlip: true,
         },
+        (decodedText) => decodedHandlerRef.current(decodedText),
         () => {},
       );
 
+      setCameraState("running");
       try {
-        const track = qr.getRunningTrackSettings?.();
-        setTorchSupported(!!track);
+        const capabilities = qr.getRunningTrackCapabilities?.() as Record<string, unknown> | undefined;
+        setTorchAvailable(Boolean(capabilities && "torch" in capabilities));
       } catch {
-        setTorchSupported(false);
+        setTorchAvailable(false);
       }
-      setRunning(true);
-    } catch (err) {
-      setError(
-        err instanceof Error && err.message.includes("Permission")
-          ? "دسترسی به دوربین داده نشد. اجازه‌ی دوربین را در تنظیمات مرورگر فعال کنید."
-          : "دوربین در دسترس نیست — از ورود دستی استفاده کنید. (دوربین فقط روی HTTPS کار می‌کند)",
+      try {
+        await qr.applyVideoConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] });
+      } catch {
+        // فوکوس پیوسته پشتیبانی نمی‌شود
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setCameraError(
+        /permission|notallowed/i.test(message)
+          ? "اجازه‌ی دوربین داده نشد. در تنظیمات مرورگر، دسترسی دوربین این سایت را روشن کنید."
+          : "دوربین باز نشد. با «افزودن کالا» یا بارکدخوان دستی ادامه دهید.",
       );
-      setRunning(false);
-    } finally {
-      setStarting(false);
+      setCameraState("error");
+      await stopCamera();
     }
-  }, [starting, submitBarcode]);
-
-  const stop = useCallback(async () => {
-    const qr = qrRef.current;
-    if (qr) {
-      try {
-        await qr.stop();
-        qr.clear();
-      } catch {
-        // قبلاً متوقف شده
-      }
-      qrRef.current = null;
-    }
-    setRunning(false);
-    setTorch(false);
-  }, []);
+  }, [cameraState, stopCamera]);
 
   const toggleTorch = useCallback(async () => {
     const qr = qrRef.current as unknown as {
       applyVideoConstraints?: (c: MediaTrackConstraints) => Promise<void>;
     } | null;
     if (!qr?.applyVideoConstraints) return;
-    const next = !torch;
+    const next = !torchOn;
     try {
       await qr.applyVideoConstraints({ advanced: [{ torch: next } as MediaTrackConstraintSet] });
-      setTorch(next);
+      setTorchOn(next);
     } catch {
-      // نور پشتیبانی نمی‌شود
+      setTorchAvailable(false);
     }
-  }, [torch]);
+  }, [torchOn]);
 
-  // بستن دوربین هنگام خروج از صفحه
-  useEffect(() => () => void stop(), [stop]);
+  // دوربین به‌صورت خودکار روشن می‌شود تا کار صندوق سریع باشد
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void startCamera();
+    }, 200);
+    return () => {
+      clearTimeout(timer);
+      void stopCamera();
+      if (lastScanTimerRef.current) clearTimeout(lastScanTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handlePick(product: Product) {
+    cart.addProduct(product, 1);
+    showLastScan(product, 1);
+    setPickerOpen(false);
+    setUnknownBarcode(null);
+    beepSuccess();
+    vibrate(35);
+  }
+
+  function handlePaid(created: Invoice) {
+    void stopCamera();
+    cart.clear();
+    setCheckoutOpen(false);
+    setSubmitError(null);
+    setLastScan(null);
+    setInvoice(created);
+    beepSuccess();
+    vibrate([40, 30, 40]);
+  }
+
+  function startNewSale() {
+    setInvoice(null);
+    // صبر کوتاه تا کادر دوربین دوباره در DOM سوار شود
+    setTimeout(() => void startCamera(), 260);
+  }
+
+  if (invoice) {
+    return <SuccessView invoice={invoice} onNewSale={startNewSale} />;
+  }
+
+  const running = cameraState === "running";
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-md flex-col gap-3 p-3 pb-8">
+    <div className="flex h-full flex-col">
       {/* سربرگ */}
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="bg-primary text-primary-foreground flex size-10 items-center justify-center rounded-xl">
-            <ScanLine className="size-5" />
+      <header className="bg-background/95 sticky top-0 z-20 flex items-center justify-between gap-2 border-b px-3 py-2 pt-safe backdrop-blur">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="bg-primary text-primary-foreground flex size-9 shrink-0 items-center justify-center rounded-xl">
+            <ScanLine className="size-4" />
           </div>
-          <div>
-            <div className="text-sm font-semibold leading-tight">اسکنر فروشگاه</div>
-            <div className="text-muted-foreground text-xs">
+          <div className="min-w-0">
+            <p className="flex items-center gap-1 truncate text-sm font-semibold">
+              <Store className="size-3.5 shrink-0 opacity-70" />
+              {catalog.store?.name ?? "فروشگاه من"}
+            </p>
+            <p className="text-muted-foreground truncate text-[11px]">
               {session.user.name ?? session.user.email}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <Badge variant={online ? "secondary" : "warning"} className="gap-1 text-[10px]">
+            {online ? <Wifi className="size-3" /> : <WifiOff className="size-3" />}
+            {online ? "آنلاین" : "آفلاین"}
+          </Badge>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-9"
+            aria-label="خروج"
+            onClick={() => void logout()}
+          >
+            <LogOut className="size-4" />
+          </Button>
+        </div>
+      </header>
+
+      {/* دوربین */}
+      <section className="relative flex-none px-3 pt-3">
+        <div className="scan-frame relative aspect-[4/3] w-full">
+          <div id="scan-region" ref={regionRef} className="absolute inset-0" />
+
+          {running ? (
+            <>
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="relative h-[62%] w-[78%]">
+                  <span className="absolute -top-px -start-px size-6 rounded-ss-lg border-t-4 border-s-4 border-sky-400" />
+                  <span className="absolute -top-px -end-px size-6 rounded-se-lg border-t-4 border-e-4 border-sky-400" />
+                  <span className="absolute -bottom-px -start-px size-6 rounded-es-lg border-b-4 border-s-4 border-sky-400" />
+                  <span className="absolute -bottom-px -end-px size-6 rounded-ee-lg border-b-4 border-e-4 border-sky-400" />
+                  <span className="scan-line" />
+                </div>
+              </div>
+              {flash ? <div className="scan-flash pointer-events-none absolute inset-0" /> : null}
+            </>
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
+              {cameraState === "starting" ? (
+                <>
+                  <Spinner />
+                  <p className="text-sm">در حال روشن‌کردن دوربین…</p>
+                </>
+              ) : (
+                <>
+                  <CameraOff className="size-9 opacity-70" />
+                  <p className="max-w-[16rem] text-center text-xs opacity-80">
+                    {cameraError ?? "دوربین خاموش است"}
+                  </p>
+                  <Button onClick={() => void startCamera()} className="rounded-full px-5">
+                    <Camera className="size-4" />
+                    روشن‌کردن دوربین
+                  </Button>
+                </>
+              )}
             </div>
+          )}
+
+          {/* کنترل‌های روی دوربین */}
+          <div className="absolute bottom-2 end-2 flex items-center gap-1.5">
+            {running && torchAvailable ? (
+              <Button
+                variant="secondary"
+                size="icon"
+                className="size-10 rounded-full shadow-lg"
+                onClick={() => void toggleTorch()}
+                aria-label="چراغ"
+              >
+                {torchOn ? <FlashlightOff className="size-5" /> : <Flashlight className="size-5" />}
+              </Button>
+            ) : null}
+            {running ? (
+              <Button
+                variant="secondary"
+                size="icon"
+                className="size-10 rounded-full shadow-lg"
+                onClick={() => void stopCamera()}
+                aria-label="خاموش کردن دوربین"
+              >
+                <CameraOff className="size-5" />
+              </Button>
+            ) : null}
+          </div>
+
+          {/* آخرین اسکن */}
+          {lastScan ? (
+            <div className="pop-in absolute inset-x-2 bottom-2 flex items-center gap-2 rounded-2xl bg-black/70 px-3 py-2 text-white backdrop-blur">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{lastScan.name}</p>
+                <p className="tnum text-[11px] opacity-80">{formatCurrency(lastScan.price)}</p>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-8 rounded-full px-3 text-xs"
+                onClick={() => cart.decrease(lastScan.productId)}
+              >
+                <RotateCcw className="size-3.5" />
+                برگشت
+              </Button>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => {
+              setUnknownBarcode(null);
+              setPickerOpen(true);
+            }}
+          >
+            <PackagePlus className="size-4" />
+            افزودن کالا / بارکد دستی
+          </Button>
+          {catalog.error ? (
+            <Button variant="ghost" size="sm" onClick={() => void catalog.refresh()}>
+              تلاش دوباره
+            </Button>
+          ) : (
+            <Badge variant="secondary" className="text-[10px]">
+              {toPersianDigits(catalog.products.length)} کالا در حافظه
+            </Badge>
+          )}
+        </div>
+      </section>
+
+      {catalog.error ? (
+        <div className="px-3 pt-3">
+          <Alert variant="destructive">
+            <AlertDescription className="text-xs">
+              فهرست کالاها بارگذاری نشد: {catalog.error}
+            </AlertDescription>
+          </Alert>
+        </div>
+      ) : null}
+
+      {/* سبد */}
+      <section className="flex-1 overflow-y-auto px-3 py-3">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+            <ShoppingCart className="size-4" />
+            سبد فاکتور
+          </h2>
+          {cart.lines.length > 0 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground h-7 px-2 text-xs"
+              onClick={() => cart.clear()}
+            >
+              خالی‌کردن سبد
+            </Button>
+          ) : null}
+        </div>
+        <CartPanel
+          lines={cart.lines}
+          onIncrease={cart.increase}
+          onDecrease={cart.decrease}
+          onRemove={cart.remove}
+          onAddManually={() => {
+            setUnknownBarcode(null);
+            setPickerOpen(true);
+          }}
+        />
+      </section>
+
+      {/* نوار پایین: جمع‌ها + ثبت فاکتور */}
+      <footer className="bg-background/95 sticky bottom-0 z-20 border-t px-3 pt-3 pb-safe backdrop-blur">
+        <div className="mb-2 flex items-end justify-between gap-3">
+          <div className="text-xs">
+            <p className="text-muted-foreground">
+              {toPersianDigits(cart.totals.count)} قلم
+              {catalog.taxRate > 0 ? ` · مالیات ${toPersianDigits(catalog.taxRate)}٪` : ""}
+            </p>
+            <p className="text-muted-foreground tnum">
+              جمع کالاها: {formatCurrency(cart.totals.subtotal)}
+            </p>
+          </div>
+          <div className="text-end">
+            <p className="text-muted-foreground text-[11px]">مبلغ قابل پرداخت</p>
+            <p className="tnum text-xl font-bold">{formatCurrency(cart.totals.total)}</p>
           </div>
         </div>
         <Button
-          variant="ghost"
-          size="icon"
-          aria-label="خروج"
+          className="h-14 w-full text-base font-semibold"
+          disabled={cart.lines.length === 0}
           onClick={() => {
-            void stop();
-            clearSession();
-            onLoggedOut();
+            setSubmitError(null);
+            setCheckoutOpen(true);
           }}
         >
-          <LogOut className="size-5" />
+          ثبت فاکتور
+          {cart.totals.count > 0 ? ` (${toPersianDigits(cart.lines.length)} ردیف)` : ""}
         </Button>
-      </header>
+      </footer>
 
-      {/* نوع اسکن + تعداد */}
-      <Card>
-        <CardContent className="space-y-3 p-3">
-          <Tabs value={scanType} onValueChange={(value) => setScanType(value as ScanType)}>
-            <TabsList className="h-auto w-full flex-wrap">
-              {allowedTypes.map((type) => (
-                <TabsTrigger key={type} value={type}>
-                  {SCAN_TYPE_LABELS[type]}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-
-          <Separator />
-
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">تعداد</span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setQty((current) => Math.max(1, current - 1))}
-              >
-                −
-              </Button>
-              <span className="w-10 text-center text-lg font-bold tabular-nums">
-                {formatNumber(qty)}
-              </span>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setQty((current) => current + 1)}
-              >
-                +
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* دوربین */}
-      <Card className="gap-0 overflow-hidden py-0">
-        <div className="bg-foreground/95 relative aspect-square w-full">
-          <div id="scan-region" ref={regionRef} className="absolute inset-0" />
-          {!running ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
-              <Camera className="size-10 opacity-70" />
-              <Button
-                onClick={() => void start()}
-                disabled={starting}
-                className="rounded-full px-6"
-              >
-                {starting ? <Spinner /> : <Camera className="size-4" />}
-                {starting ? "در حال آماده‌سازی…" : "شروع اسکن با دوربین"}
-              </Button>
-            </div>
-          ) : null}
-        </div>
-        {running ? (
-          <CardContent className="flex items-center justify-between gap-2 p-3">
-            <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
-              <span className="bg-success inline-block size-2 animate-pulse rounded-full" />
-              دوربین فعال — بارکد را روبه‌رو بگیرید
-            </span>
-            <div className="flex gap-1.5">
-              {torchSupported ? (
-                <Button variant="outline" size="icon" onClick={() => void toggleTorch()}>
-                  {torch ? (
-                    <FlashlightOff className="size-4" />
-                  ) : (
-                    <Flashlight className="size-4" />
-                  )}
-                </Button>
-              ) : null}
-              <Button variant="outline" size="icon" onClick={() => void stop()}>
-                <CameraOff className="size-4" />
-              </Button>
-            </div>
-          </CardContent>
-        ) : null}
-      </Card>
-
-      {error ? (
-        <Alert variant="destructive">
-          <CameraOff className="size-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+      {pickerOpen ? (
+        <ProductPicker
+          unknownBarcode={unknownBarcode}
+          search={catalog.searchLocal}
+          onPick={handlePick}
+          onClose={() => {
+            setPickerOpen(false);
+            setUnknownBarcode(null);
+          }}
+        />
       ) : null}
 
-      {/* ورود دستی */}
-      <Card>
-        <CardContent className="p-3">
-          <Button
-            variant="ghost"
-            className="text-muted-foreground w-full"
-            onClick={() => setManualOpen((value) => !value)}
-          >
-            <Keyboard className="size-4" />
-            ورود دستی بارکد
-          </Button>
-          {manualOpen ? (
-            <form
-              className="mt-3 flex gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submitBarcode(manualCode);
-                setManualCode("");
-              }}
-            >
-              <Input
-                dir="ltr"
-                inputMode="numeric"
-                placeholder="6281111000019"
-                value={manualCode}
-                onChange={(event) => setManualCode(event.target.value)}
-              />
-              <Button type="submit" disabled={busy || !manualCode.trim()}>
-                {busy ? <Spinner /> : null}
-                ثبت
-              </Button>
-            </form>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {/* آخرین نتیجه */}
-      {last ? (
-        <Card className="border-success/40 bg-success/5">
-          <CardContent className="flex items-start gap-3 p-3">
-            <CheckCircle2 className="text-success mt-0.5 size-5 shrink-0" />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold">
-                {last.product ? last.product.name : `بارکد ${last.event.barcode}`}
-              </div>
-              <div className="text-muted-foreground mt-0.5 text-xs">
-                {SCAN_TYPE_LABELS[last.event.type]} · {formatNumber(last.event.qty)} عدد
-                {last.product ? ` · ${formatCurrency(last.product.salePrice)}` : ""}
-                {" · "}
-                {formatDateTimeJalali(last.event.createdAt)}
-              </div>
-              {!last.product ? (
-                <div className="text-muted-foreground mt-1 text-xs">
-                  محصولی با این بارکد تعریف نشده — رویداد ثبت شد.
-                </div>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
+      {checkoutOpen ? (
+        <CheckoutSheet
+          lines={cart.lines}
+          subtotal={cart.totals.subtotal}
+          tax={cart.totals.tax}
+          total={cart.totals.total}
+          taxRate={catalog.taxRate}
+          busy={submitting}
+          error={submitError}
+          onClose={() => setCheckoutOpen(false)}
+          onPaid={handlePaid}
+          onError={setSubmitError}
+          onBusyChange={setSubmitting}
+        />
       ) : null}
-
-      {/* آخرین اسکن‌ها */}
-      <Card>
-        <CardHeader className="p-3 pb-0">
-          <CardTitle className="flex items-center justify-between gap-2 text-sm">
-            آخرین اسکن‌ها
-            <Badge variant="secondary">لحظه‌ای روی داشبورد</Badge>
-          </CardTitle>
-          <CardDescription className="text-xs">
-            رویدادهای همین دستگاه و بقیه‌ی دستگاه‌ها
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-3">
-          {events.length === 0 ? (
-            <Empty className="border border-dashed p-4">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <PackageSearch />
-                </EmptyMedia>
-                <EmptyTitle>هنوز اسکنی ثبت نشده</EmptyTitle>
-                <EmptyDescription>
-                  اولین بارکد را با دوربین یا ورود دستی ثبت کنید.
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <ItemGroup>
-              {events.map((event) => (
-                <Item key={event.id} size="sm" variant="outline">
-                  <ItemMedia variant="icon">
-                    <Package />
-                  </ItemMedia>
-                  <ItemContent>
-                    <ItemTitle>{event.product?.name ?? event.barcode}</ItemTitle>
-                    <ItemDescription>
-                      {formatDateTimeJalali(event.createdAt)}
-                    </ItemDescription>
-                  </ItemContent>
-                  <ItemActions>
-                    <Badge variant="outline">
-                      {SCAN_TYPE_LABELS[event.type]} · {formatNumber(event.qty)}
-                    </Badge>
-                  </ItemActions>
-                </Item>
-              ))}
-            </ItemGroup>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

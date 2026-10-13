@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, CreditCard } from "lucide-react";
+import { ArrowRight, CreditCard, Printer } from "lucide-react";
 
 import { Button } from "@my-store/ui-kit/components/button";
 import {
@@ -72,12 +72,20 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
             {formatDateJalali(invoice.createdAt)}
           </p>
         </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/accounting">
-            <ArrowRight className="size-4" />
-            بازگشت به فاکتورها
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/accounting">
+              <ArrowRight className="size-4" />
+              بازگشت به فاکتورها
+            </Link>
+          </Button>
+          <Button size="sm" asChild>
+            <Link href={`/print/invoices/${invoice.id}`} target="_blank">
+              <Printer className="size-4" />
+              چاپ فاکتور
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">

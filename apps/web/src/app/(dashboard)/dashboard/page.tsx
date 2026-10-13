@@ -46,7 +46,7 @@ import { SalesChart } from "@/components/sales-chart";
 import { ScanFeed } from "@/components/scan-feed";
 import { StatCard } from "@/components/stat-card";
 import { requirePageUser } from "@/lib/auth";
-import { listInvoices, listProducts } from "@/lib/repositories";
+import { listInvoiceHeads, listProducts } from "@/lib/repositories";
 import { buildSalesSeries, daysAgo } from "@/lib/sales-series";
 import { getDailySales, getSummary } from "@/lib/stats";
 
@@ -62,16 +62,15 @@ export default async function DashboardPage() {
   const now = new Date();
   const weekStart = daysAgo(7, now);
 
-  const [summary, recentPage, lowStockPage, allProductsPage, dailySales] =
+  const [summary, recentInvoices, lowStockPage, allProductsPage, dailySales] =
     await Promise.all([
       getSummary(storeId),
-      listInvoices(storeId, { page: 1, pageSize: 8 }),
+      listInvoiceHeads(storeId, { limit: 8 }),
       listProducts(storeId, { lowStock: true, page: 1, pageSize: 6 }),
       listProducts(storeId, { page: 1, pageSize: 1 }),
       getDailySales(storeId, weekStart, now),
     ]);
 
-  const recentInvoices = recentPage.items;
   const lowStock = lowStockPage.items;
   const productCount = allProductsPage.total;
   const series = buildSalesSeries(dailySales, weekStart, now);
@@ -286,12 +285,12 @@ export default async function DashboardPage() {
                             {invoice.number}
                           </Link>
                         </TableCell>
-                        <TableCell>{invoice.customer?.name ?? "حضوری"}</TableCell>
+                        <TableCell>{invoice.customerName ?? "حضوری"}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">
                           {formatDateJalali(invoice.createdAt)}
                         </TableCell>
                         <TableCell className="tabular-nums">
-                          {formatCurrency(Number(invoice.total))}
+                          {formatCurrency(invoice.total)}
                         </TableCell>
                         <TableCell>
                           <InvoiceStatusBadge status={invoice.status} />
@@ -306,7 +305,7 @@ export default async function DashboardPage() {
         </Card>
 
         <div className="lg:col-span-3">
-          <ScanFeed />
+          <ScanFeed storeId={storeId} />
         </div>
       </div>
     </div>

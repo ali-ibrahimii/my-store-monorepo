@@ -10,5 +10,11 @@ export function App() {
   if (!session) {
     return <LoginScreen onLoggedIn={setSession} />;
   }
-  return <ScannerScreen session={session} onLoggedOut={() => setSession(null)} />;
+  return (
+    <ScannerScreen
+      key={session.user.id}
+      session={session}
+      onLoggedOut={() => setSession(null)}
+    />
+  );
 }

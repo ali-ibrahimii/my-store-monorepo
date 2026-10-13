@@ -4,6 +4,8 @@ import type {
   Expense,
   ExpenseCategory,
   Invoice,
+  LiveCartLine,
+  LiveInvoiceHead,
   Page,
   Product,
   Purchase,
@@ -18,6 +20,7 @@ import {
   customerDTO,
   expenseDTO,
   invoiceDTO,
+  invoiceHeadDTO,
   pageDTO,
   productDTO,
   purchaseDTO,
@@ -27,6 +30,7 @@ import {
   type CategoryRow,
   type CustomerRow,
   type ExpenseRow,
+  type InvoiceHeadRow,
   type InvoiceRow,
   type ProductRow,
   type PurchaseRow,
@@ -63,6 +67,23 @@ const PURCHASE_SELECT = `
       low_stock_threshold, category_id, store_id, created_at, updated_at
     )
   )
+`;
+
+/**
+ * انتخاب سبک برای فهرست فاکتورها.
+ * (قلم‌ها با محصول کامل و پرداخت‌ها را نمی‌کشد؛ همین باعث می‌شود
+ *  صفحه‌ی فاکتورها روی اینترنت واقعی چند برابر سریع‌تر باز شود.)
+ */
+export const INVOICE_HEAD_SELECT = `
+  id, number, status, total, paid_amount, created_at, updated_at,
+  customers (name),
+  invoice_items (qty)
+`;
+
+const SCAN_SELECT = `
+  id, product_id, barcode, type, qty, device, note, user_id, store_id, created_at,
+  products (id, name, barcode, sale_price, stock),
+  profiles (name, email)
 `;
 
 export function escapeIlike(value: string): string {
@@ -277,25 +298,97 @@ export async function listPurchases(storeId: string): Promise<Purchase[]> {
 
 export async function listScanEvents(
   storeId: string,
-  options: { page?: number; pageSize?: number } = {},
+  options: { page?: number; pageSize?: number; since?: Date; type?: string } = {},
 ): Promise<Page<ScanEvent>> {
   const page = Math.max(1, options.page ?? 1);
   const pageSize = Math.min(200, Math.max(1, options.pageSize ?? 30));
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
-  const result = await getAdmin()
+  let query = getAdmin()
     .from("scan_events")
-    .select(
-      `id, product_id, barcode, type, qty, device, note, user_id, store_id, created_at,
-       products (id, name, barcode, sale_price, stock),
-       profiles (name, email)`,
-      { count: "exact" },
-    )
-    .eq("store_id", storeId)
-    .order("created_at", { ascending: false })
-    .range(from, to);
+    .select(SCAN_SELECT, { count: "exact" })
+    .eq("store_id", storeId);
+  if (options.since) query = query.gt("created_at", options.since.toISOString());
+  if (options.type) query = query.eq("type", options.type);
+  const result = await query.order("created_at", { ascending: false }).range(from, to);
   const rows = assertData(result) as unknown as ScanRow[];
   return pageDTO(rows.map(scanEventDTO), result.count ?? rows.length, page, pageSize);
+}
+
+/**
+ * فهرست سبک فاکتورها (سرِ فاکتور).
+ * `since` برای به‌روزرسانی افزایشی (پولینگ سریع) استفاده می‌شود.
+ */
+export async function listInvoiceHeads(
+  storeId: string,
+  options: { limit?: number; since?: Date; ids?: string[] } = {},
+): Promise<LiveInvoiceHead[]> {
+  const limit = Math.min(200, Math.max(1, options.limit ?? 50));
+  let query = getAdmin().from("invoices").select(INVOICE_HEAD_SELECT).eq("store_id", storeId);
+  if (options.since) query = query.gt("updated_at", options.since.toISOString());
+  if (options.ids?.length) query = query.in("id", options.ids);
+  const result = await query.order("created_at", { ascending: false }).limit(limit);
+  const rows = assertData(result) as unknown as InvoiceHeadRow[];
+  return rows.map(invoiceHeadDTO);
+}
+
+export async function getInvoiceHead(storeId: string, id: string): Promise<LiveInvoiceHead | null> {
+  const result = await getAdmin()
+    .from("invoices")
+    .select(INVOICE_HEAD_SELECT)
+    .eq("store_id", storeId)
+    .eq("id", id)
+    .maybeSingle();
+  const row = assertData(result) as unknown as InvoiceHeadRow | null;
+  return row ? invoiceHeadDTO(row) : null;
+}
+
+/**
+ * سبدهای در حال تکمیل روی گوشی.
+ *
+ * اپ اسکنر هر بارکد را با نوع `CART` ثبت می‌کند (بدون اثر روی موجودی).
+ * سبدِ «فعال» یعنی رویدادهای CART بعد از آخرین فاکتورِ صادرشده؛ به‌محض
+ * اینکه فاکتور ثبت شود، سبد خودش خالی می‌شود.
+ */
+export async function getLiveCart(storeId: string, limit = 120): Promise<LiveCartLine[]> {
+  const lastInvoice = await getAdmin()
+    .from("invoices")
+    .select("created_at")
+    .eq("store_id", storeId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const since = (assertData(lastInvoice) as { created_at: string } | null)?.created_at;
+
+  let query = getAdmin()
+    .from("scan_events")
+    .select(SCAN_SELECT)
+    .eq("store_id", storeId)
+    .eq("type", "CART");
+  if (since) query = query.gt("created_at", since);
+  const result = await query.order("created_at", { ascending: false }).limit(limit);
+  const rows = assertData(result) as unknown as ScanRow[];
+
+  const lines = new Map<string, LiveCartLine>();
+  for (const row of rows) {
+    const event = scanEventDTO(row);
+    const key = event.barcode;
+    const existing = lines.get(key);
+    if (existing) {
+      existing.qty += event.qty;
+      continue;
+    }
+    lines.set(key, {
+      barcode: event.barcode,
+      productId: event.productId,
+      name: event.product?.name ?? null,
+      qty: event.qty,
+      salePrice: event.product?.salePrice ?? 0,
+      lastAt: event.createdAt,
+      device: event.device,
+    });
+  }
+  return [...lines.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
 }
 
 export async function listLedger(

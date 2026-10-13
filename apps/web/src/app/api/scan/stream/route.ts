@@ -20,6 +20,7 @@ export async function GET() {
 
   let unsubscribe: (() => void) | null = null;
   let pingTimer: ReturnType<typeof setInterval> | null = null;
+  let closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -47,10 +48,22 @@ export async function GET() {
           // client disconnected
         }
       }, 15000);
+
+      // روی ورسل عمر تابع محدود است؛ خودمان بعد از ۵۰ ثانیه اتصال را
+      // تمیز می‌بندیم. EventSource مرورگر خودش دوباره وصل می‌شود و
+      // در فاصله‌ی اتصال، پولینگ سبک `/api/live` چیزی را از دست نمی‌دهد.
+      closeTimer = setTimeout(() => {
+        try {
+          controller.close();
+        } catch {
+          // already closed
+        }
+      }, 50_000);
     },
     cancel() {
       if (unsubscribe) unsubscribe();
       if (pingTimer) clearInterval(pingTimer);
+      if (closeTimer) clearTimeout(closeTimer);
     },
   });
 

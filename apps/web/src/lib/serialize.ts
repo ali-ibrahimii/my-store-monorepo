@@ -5,6 +5,7 @@ import type {
   ExpenseCategory,
   Invoice,
   InvoiceItem,
+  LiveInvoiceHead,
   Page,
   Payment,
   Product,
@@ -251,6 +252,38 @@ export interface InvoiceRow {
   customers?: CustomerRow | CustomerRow[] | null;
   invoice_items?: InvoiceItemRow[] | null;
   payments?: PaymentRow[] | null;
+}
+
+/**
+ * سرِ سبک فاکتور — برای فهرست‌ها و به‌روزرسانی لحظه‌ای.
+ * (قلم‌ها با محصول کامل، پرداخت‌ها و مشتری کامل در این انتخاب نیستند؛
+ *  صفحه‌ی خود فاکتور آن‌ها را می‌خواند.)
+ */
+export interface InvoiceHeadRow {
+  id: string;
+  number: string;
+  status: Invoice["status"];
+  total: number | string;
+  paid_amount: number | string;
+  created_at: string;
+  updated_at: string;
+  customers?: { name: string } | { name: string }[] | null;
+  invoice_items?: { qty: number }[] | null;
+}
+
+export function invoiceHeadDTO(row: InvoiceHeadRow): LiveInvoiceHead {
+  const customer = one(row.customers);
+  return {
+    id: row.id,
+    number: row.number,
+    status: row.status,
+    customerName: customer?.name ?? null,
+    total: num(row.total),
+    paidAmount: num(row.paid_amount),
+    itemCount: (row.invoice_items ?? []).reduce((sum, item) => sum + Number(item.qty ?? 0), 0),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at ?? row.created_at),
+  };
 }
 
 export function invoiceDTO(row: InvoiceRow): Invoice {
