@@ -40,11 +40,11 @@ export default async function BarcodesPage({
     <div className="space-y-6">
       <PageHeader
         title="بارکدها"
-        description="برای محصولاتت بارکد استاندارد بساز، روی محصولات بگذار و برچسب چاپ کن."
+        description="اگر کالا بارکد ناشر دارد همان را بگذار؛ برای کالای بدون بارکد، کد درون‌فروشگاهی بساز و برچسب چاپ کن."
       >
         <Badge variant="secondary" className="gap-1">
           <Barcode className="size-3" />
-          EAN-13 — پیشوند ایران
+          EAN-13 — کد درون‌فروشگاهی (۲۰۰)
         </Badge>
         <Badge variant={withoutBarcode > 0 ? "warning" : "success"}>
           {withoutBarcode > 0

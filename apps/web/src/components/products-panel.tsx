@@ -44,7 +44,7 @@ import {
 } from "@my-store/ui-kit/components/table";
 import { Tabs, TabsList, TabsTrigger } from "@my-store/ui-kit/components/tabs";
 import { Textarea } from "@my-store/ui-kit/components/textarea";
-import { formatCurrency, toPersianDigits } from "@my-store/shared-utils";
+import { DEFAULT_CURRENCY, formatCurrency, toPersianDigits } from "@my-store/shared-utils";
 
 export interface ProductRow {
   id: string;
@@ -94,7 +94,7 @@ export function ProductsPanel({
   products,
   categories,
   canManage,
-  currency = "IRR",
+  currency = DEFAULT_CURRENCY,
   lowStockDefault = 5,
 }: {
   products: ProductRow[];

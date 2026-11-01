@@ -88,8 +88,33 @@ export function normalizeForLookup(raw: string): string | null {
 // ساختار ۱۳ رقمی: ۶۲۸ + کد فروشگاه (۳ رقم) + سریال کالا (۶ رقم) + رقم کنترلی
 // ============================================================
 
-/** پیشوند GS1 ایران (کد کشور) */
+/**
+ * پیشوند قدیمی (کد کشور ۶۲۸ = ایران).
+ *
+ * ⚠️ برای برچسبی که خود فروشگاه چاپ می‌کند **درست نیست**: ۶۲۸ متعلق به
+ * GS1 ایران است؛ استفاده از آن برای کالای بدون کد رسمی، کد جعلی می‌سازد
+ * و اگر روزی کالا با کد رسمی ۶۲۸ در فروشگاه دیگری اسکن شود، تداخل
+ * (و در سامانه‌های کشوری، تخلف) رخ می‌دهد. نام قبلی برای سازگاری
+ * نگه داشته شده است.
+ */
 export const GS1_IRAN_PREFIX = "628";
+
+/**
+ * پیشوند «توزیع محدود» (کد درون‌فروشگاهی / RCN).
+ *
+ * طبق GS1 General Specifications، پیشوندهای ۲۰۰–۲۹۹ (و ۲۰–۲۹) برای
+ * شماره‌گذاری اقلام «داخل شرکت/فروشگاه» رزرو شده‌اند؛ یعنی همان کاری که
+ * ما می‌کنیم: فروشگاه خودش برچسب می‌زند.
+ *
+ * ۲۰۰ = قالب این پروژه: ۲۰۰ + کد ۳ رقمی فروشگاه + ۶ رقم سریال + رقم کنترلی
+ *  • هیچ ادعایی درباره‌ی کشور سازنده نمی‌کند (برخلاف ۶۲۸ ساختگی)
+ *  • با کدهای رسمی کشورها (۶۲۸ ایران، ۹۹۵ افغانستان اگر صادر شود …) تداخل ندارد
+ *  • طول ۱۳ و رقم کنترلی استاندارد، پس هر اسکنر EAN-13 آن را می‌خواند
+ *  • ⚠️ اگر بعداً از صندوق‌فروشی (POS) شخص ثالث استفاده شد، بدانید بعضی
+ *    POSها پیشوند ۲ را «کالای وزنی» تفسیر می‌کنند؛ در آن صورت کدهای دستی
+ *    یا خرید پیشوند رسمی GS1 لازم است.
+ */
+export const GS1_INSTORE_PREFIX = "200";
 
 /** فقط رقم‌ها را نگه می‌دارد و به طول دلخواه می‌برد/pad می‌کند */
 function digitsOnly(raw: unknown, length: number): string {
@@ -115,7 +140,7 @@ export function storeCodeFromId(storeId: string): string {
 }
 
 export interface GenerateEan13Options {
-  /** پیشوند GS1 — پیش‌فرض ۶۲۸ (ایران) */
+  /** پیشوند GS1 — پیش‌فرض ۲۰۰ (کد درون‌فروشگاهی/RCN) */
   prefix?: string;
   /** کد فروشگاه (۳ رقم) — از `storeCodeFromId()` بگیرید */
   storeCode?: string;
@@ -130,7 +155,7 @@ export interface GenerateEan13Options {
  * خروجی همیشه ۱۳ رقم و «قابل اسکن» است (رقم کنترلی محاسبه‌شده).
  */
 export function generateEan13(options: GenerateEan13Options = {}): string {
-  const prefix = digitsOnly(options.prefix ?? GS1_IRAN_PREFIX, 3);
+  const prefix = digitsOnly(options.prefix ?? GS1_INSTORE_PREFIX, 3);
   const storeCode = digitsOnly(options.storeCode ?? "0", 3).padStart(3, "0");
   const random = options.random ?? Math.random;
   const serial =

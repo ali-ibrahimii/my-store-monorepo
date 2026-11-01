@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { rangeFromParams } from "@/lib/date-range";
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
 import { listExpenses } from "@/lib/repositories";
 import { expenseDTO, type ExpenseRow } from "@/lib/serialize";
@@ -13,11 +14,10 @@ export async function GET(request: Request) {
     const { user, response } = await requireStoreUser("ADMIN");
     if (!user) return response;
     const { searchParams } = new URL(request.url);
-    const from = searchParams.get("from");
-    const to = searchParams.get("to");
+    const range = rangeFromParams(searchParams.get("from"), searchParams.get("to"));
     const page = await listExpenses(user.storeId, {
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to + "T23:59:59.999Z") : undefined,
+      from: range.from,
+      to: range.to,
       search: searchParams.get("search")?.trim() || undefined,
       page: Number(searchParams.get("page")) || 1,
       pageSize: Number(searchParams.get("pageSize")) || 50,

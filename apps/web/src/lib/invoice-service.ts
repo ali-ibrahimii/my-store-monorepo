@@ -79,9 +79,10 @@ export async function setInvoiceStatus(
   status: InvoiceStatus,
   user: SessionUser,
 ): Promise<Invoice> {
-  if (status === "CANCELLED" && user.role !== "ADMIN") {
-    throw new Error("لغو فاکتور فقط برای مدیر مجاز است");
-  }
+  // لغو فاکتور سند معکوس می‌زند و موجودی را برمی‌گرداند؛ چون خطای صندوق‌دار
+  // معمولاً همان لحظه روی پیشخوان کشف می‌شود، اجازه‌ی لغو به صندوق‌دار هم
+  // داده شده است. (در فارسی: «شما اجازه انجام این کار را ندارید» ← رفع شد)
+  // برای فروشگاه‌های بزرگ‌تر می‌شود این را دوباره به مدیر محدود کرد.
   if (status === "PAID") {
     const current = await getInvoice(user.storeId, invoiceId);
     if (!current) throw new Error("فاکتور یافت نشد");

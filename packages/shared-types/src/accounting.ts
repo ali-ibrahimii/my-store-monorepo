@@ -100,6 +100,12 @@ export interface SummaryReport {
   monthRevenue: number;
   todayExpenses: number;
   monthExpenses: number;
+  /** بهای تمام‌شده‌ی کالای فروش‌رفته (COGS) — از دفتر کل */
+  todayCogs: number;
+  monthCogs: number;
+  /** فروش − بهای تمام‌شده */
+  grossProfitToday: number;
+  /** فروش − بهای تمام‌شده − هزینه */
   netProfitToday: number;
   netProfitMonth: number;
   inventoryValue: number;

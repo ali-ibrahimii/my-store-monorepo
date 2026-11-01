@@ -29,6 +29,7 @@ import { beepError, beepSuccess, vibrate } from "../lib/feedback";
 import { CartPanel } from "./CartPanel";
 import { CheckoutSheet } from "./CheckoutSheet";
 import { ProductPicker } from "./ProductPicker";
+import { QuickProductSheet } from "./QuickProductSheet";
 import { SuccessView } from "./SuccessView";
 
 interface ScannerScreenProps {
@@ -67,6 +68,7 @@ export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
   >(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
+  const [newProductBarcode, setNewProductBarcode] = useState<string | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -265,6 +267,19 @@ export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
     setUnknownBarcode(null);
     beepSuccess();
     vibrate(35);
+  }
+
+  /** کالای جدید از خود گوشی ثبت شد → همان لحظه به سبد اضافه شود */
+  function handleProductCreated(product: Product) {
+    setNewProductBarcode(null);
+    setUnknownBarcode(null);
+    setPickerOpen(false);
+    cart.addProduct(product, 1);
+    showLastScan(product, 1);
+    beepSuccess();
+    vibrate([30, 25, 30]);
+    void catalog.refresh();
+    if (product.barcode) publishCartScan(product.barcode, 1);
   }
 
   function handlePaid(created: Invoice) {
@@ -511,10 +526,26 @@ export function ScannerScreen({ session, onLoggedOut }: ScannerScreenProps) {
           unknownBarcode={unknownBarcode}
           search={catalog.searchLocal}
           onPick={handlePick}
+          onCreateNew={
+            unknownBarcode
+              ? () => {
+                  setNewProductBarcode(unknownBarcode);
+                  setPickerOpen(false);
+                }
+              : undefined
+          }
           onClose={() => {
             setPickerOpen(false);
             setUnknownBarcode(null);
           }}
+        />
+      ) : null}
+
+      {newProductBarcode ? (
+        <QuickProductSheet
+          barcode={newProductBarcode}
+          onCreated={handleProductCreated}
+          onClose={() => setNewProductBarcode(null)}
         />
       ) : null}
 

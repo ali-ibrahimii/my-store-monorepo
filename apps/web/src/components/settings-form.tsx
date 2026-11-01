@@ -19,6 +19,7 @@ import { Input } from "@my-store/ui-kit/components/input";
 import { Label } from "@my-store/ui-kit/components/label";
 import { Spinner } from "@my-store/ui-kit/components/spinner";
 import { Textarea } from "@my-store/ui-kit/components/textarea";
+import { CURRENCY_LABELS, DEFAULT_CURRENCY } from "@my-store/shared-utils";
 
 export function SettingsForm({ store }: { store: Store }) {
   const router = useRouter();
@@ -34,7 +35,7 @@ export function SettingsForm({ store }: { store: Store }) {
         phone: String(form.get("phone") ?? ""),
         address: String(form.get("address") ?? ""),
         email: String(form.get("email") ?? ""),
-        currency: String(form.get("currency") ?? "IRR"),
+        currency: String(form.get("currency") ?? DEFAULT_CURRENCY),
         taxRate: Number(form.get("taxRate") ?? 0),
         invoicePrefix: String(form.get("invoicePrefix") ?? "INV"),
         receiptFooter: String(form.get("receiptFooter") ?? ""),
@@ -75,7 +76,21 @@ export function SettingsForm({ store }: { store: Store }) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="currency">واحد پول</Label>
-            <Input id="currency" name="currency" dir="ltr" defaultValue={store.currency} />
+            <select
+              id="currency"
+              name="currency"
+              defaultValue={store.currency || DEFAULT_CURRENCY}
+              className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+            >
+              {Object.entries(CURRENCY_LABELS).map(([code, label]) => (
+                <option key={code} value={code}>
+                  {label} ({code})
+                </option>
+              ))}
+            </select>
+            <p className="text-muted-foreground text-xs">
+              مبالغ و رسیدها با همین واحد نمایش داده می‌شوند. تغییر آن، ارقام ذخیره‌شده را تبدیل نمی‌کند.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="taxRate">مالیات پیش‌فرض (درصد)</Label>

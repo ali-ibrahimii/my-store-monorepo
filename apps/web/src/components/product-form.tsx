@@ -142,7 +142,7 @@ export function ProductForm({ categories, storeCode = "100" }: ProductFormProps)
               ? detectBarcodeFormat(barcode.trim()) === "UNKNOWN"
                 ? "این کد استاندارد نیست؛ ولی می‌توانی همان را ثبت کنی."
                 : "این بارکد استاندارد است و اسکنر آن را می‌خواند."
-              : `اختیاری — اگر خالی بگذاری، سیستم یک EAN-13 با پیشوند ایران و کد فروشگاه ${toPersianDigits(storeCode)} می‌سازد.`}
+              : `اختیاری — اگر خالی بگذاری، سیستم یک EAN-13 درون‌فروشگاهی و کد فروشگاه ${toPersianDigits(storeCode)} می‌سازد.`}
           </FieldDescription>
           {barcode.trim() && barcode.trim().length >= 4 ? (
             <BarcodeImage

@@ -3,3 +3,5 @@ export * from "./formatters";
 export * from "./constants";
 export * from "./validation";
 export * from "./slugify";
+export * from "./errors";
+export * from "./datetime";

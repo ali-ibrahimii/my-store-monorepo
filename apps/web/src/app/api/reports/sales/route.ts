@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rangeFromParams } from "@/lib/date-range";
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
 import { getDailySales } from "@/lib/stats";
 import type { SalesReport } from "@my-store/shared-types";
@@ -12,14 +13,8 @@ export async function GET(request: Request) {
     if (!user) return response;
 
     const { searchParams } = new URL(request.url);
-    const now = new Date();
-    const defaultFrom = new Date(now.getFullYear(), now.getMonth(), 1);
-    const fromDate = searchParams.get("from") ? new Date(searchParams.get("from")!) : defaultFrom;
-    const toDate = searchParams.get("to")
-      ? new Date(searchParams.get("to")! + "T23:59:59.999Z")
-      : now;
-
-    const points = await getDailySales(user.storeId, fromDate, toDate);
+    const range = rangeFromParams(searchParams.get("from"), searchParams.get("to"));
+    const points = await getDailySales(user.storeId, range.from, range.to);
 
     const report: SalesReport = {
       points,

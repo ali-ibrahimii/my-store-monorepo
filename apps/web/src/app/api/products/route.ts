@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { forbidCashier, handleRouteError, requireStoreUser } from "@/lib/api-helpers";
+import { handleRouteError, jsonError, requireStoreUser } from "@/lib/api-helpers";
 import { generateUniqueBarcode } from "@/lib/barcode-service";
 import { listProducts } from "@/lib/repositories";
 import { productDTO, redactProduct, type ProductRow } from "@/lib/serialize";
@@ -32,12 +32,21 @@ export async function GET(request: Request) {
   }
 }
 
+/**
+ * POST /api/products — ثبت کالای جدید.
+ *
+ * صندوقدار هم می‌تواند کالای تازه ثبت کند (این نیاز واقعی بازار است:
+ * جنس نو با بارکد کارخانه‌ای روی پیشخوان اسکن می‌شود و اگر در سیستم
+ * نباشد، فروش متوقف می‌شود). ولی اختیارش محدود است:
+ *   • قیمت خرید (costPrice) را صندوق‌دار نمی‌تواند بگذارد → صفر، تا مدیر بعداً
+ *     از مسیر «خرید» ثبت کند (سود و بهای تمام‌شده خراب نمی‌شود)
+ *   • موجودی اولیه صفر است؛ ورود جنس فقط با «خرید» یا «حرکت انبار» انجام شود
+ *   • قیمت فروش اجباری و بزرگ‌تر از صفر است
+ */
 export async function POST(request: Request) {
   try {
-    const { user, response } = await requireStoreUser("ADMIN");
+    const { user, response } = await requireStoreUser();
     if (!user) return response;
-    const denied = forbidCashier(user);
-    if (denied) return denied;
 
     const body = await request.json();
     const parsed = productSchema.safeParse(body);
@@ -48,6 +57,23 @@ export async function POST(request: Request) {
       );
     }
     const data = parsed.data;
+    const isAdmin = user.role === "ADMIN";
+    if (!isAdmin && Number(data.salePrice ?? 0) <= 0) {
+      return jsonError(400, "برای ثبت کالای جدید، قیمت فروش لازم است");
+    }
+
+    // سهمیه‌ی روزانه برای صندوق‌دار (مهاجرت 0003). اگر مهاجرت اجرا نشده باشد،
+    // تابع وجود ندارد و ثبت کالا نباید بشکند — پس خطای «تابع نیست» نادیده
+    // گرفته می‌شود.
+    if (!isAdmin) {
+      const gate = await getAdmin().rpc("assert_product_creation_allowed", {
+        p_store: user.storeId,
+        p_user: user.id,
+      });
+      if (gate.error && !/does not exist|schema cache|PGRST202/i.test(gate.error.message)) {
+        return jsonError(429, gate.error.message);
+      }
+    }
     const provided = normalizeBarcode(data.barcode ?? "");
     const barcode = provided || (await generateUniqueBarcode(user.storeId));
 
@@ -69,11 +95,13 @@ export async function POST(request: Request) {
         barcode,
         sku: data.sku || null,
         description: data.description || null,
-        cost_price: Number(data.costPrice ?? 0),
+        // صندوق‌دار: بهای خرید و موجودی را تعیین نمی‌کند (ضد تقلب)
+        cost_price: isAdmin ? Number(data.costPrice ?? 0) : 0,
         sale_price: Number(data.salePrice ?? 0),
-        stock: Number(data.stock ?? 0),
-        low_stock_threshold: Number(data.lowStockThreshold ?? 5),
+        stock: isAdmin ? Number(data.stock ?? 0) : 0,
+        low_stock_threshold: isAdmin ? Number(data.lowStockThreshold ?? 5) : 0,
         category_id: data.categoryId || null,
+        created_by: user.id,
       })
       .select(
         `id, name, sku, barcode, description, cost_price, sale_price, stock, low_stock_threshold,
@@ -81,7 +109,7 @@ export async function POST(request: Request) {
       )
       .single();
     const row = assertData(inserted) as unknown as ProductRow;
-    if (Number(data.stock ?? 0) > 0) {
+    if (isAdmin && Number(data.stock ?? 0) > 0) {
       await getAdmin().from("inventory_movements").insert({
         store_id: user.storeId,
         product_id: row.id,

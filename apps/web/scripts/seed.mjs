@@ -113,7 +113,7 @@ async function main() {
       .insert({
         name: "فروشگاه من",
         slug: "mystore",
-        currency: "IRR",
+        currency: "AFN",
         phone: "02100000000",
         address: "تهران",
         tax_rate: 0,

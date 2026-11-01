@@ -367,7 +367,7 @@ export function BarcodeStudio({
               بارکد خودکار برای محصولات بدون بارکد
             </CardTitle>
             <CardDescription>
-              برای هر کالایی که بارکد ندارد یک <strong>EAN-13 استاندارد</strong> با پیشوند ایران
+              برای هر کالایی که بارکد ندارد یک <strong>EAN-13 معتبر</strong> با کد درون‌فروشگاهی (۲۰۰)
               (۶۲۸) و کد فروشگاه شما ({toPersianDigits(storeCode)}) ساخته و ثبت می‌شود؛ همان کدی
               که اسکنر موبایل و بارکدخوان دستگاهی می‌خواند.
             </CardDescription>

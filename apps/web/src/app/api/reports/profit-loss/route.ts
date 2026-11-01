@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { rangeFromParams } from "@/lib/date-range";
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
 import { getLedgerBreakdown } from "@/lib/stats";
 import { LEDGER_ACCOUNT_LABELS } from "@my-store/shared-utils";
@@ -13,11 +14,9 @@ export async function GET(request: Request) {
     if (!user) return response;
 
     const { searchParams } = new URL(request.url);
-    const now = new Date();
-    const defaultFrom = new Date(now.getFullYear(), now.getMonth(), 1);
-    const fromDate = searchParams.get("from") ? new Date(searchParams.get("from")!) : defaultFrom;
-    const toDate = searchParams.get("to") ? new Date(searchParams.get("to")! + "T23:59:59.999Z") : now;
-    const byAccount = await getLedgerBreakdown(user.storeId, fromDate, toDate);
+    // بازه با ساعت فروشگاه (Asia/Kabul) و اعتبارسنجی تاریخ
+    const range = rangeFromParams(searchParams.get("from"), searchParams.get("to"));
+    const byAccount = await getLedgerBreakdown(user.storeId, range.from, range.to);
 
     const rows: ProfitLossRow[] = [...byAccount.entries()].map(([account, value]) => ({
       account: account as ProfitLossRow["account"],
@@ -33,8 +32,8 @@ export async function GET(request: Request) {
     const grossProfit = revenue - cogs;
 
     const report: ProfitLossReport = {
-      from: fromDate.toISOString().slice(0, 10),
-      to: toDate.toISOString().slice(0, 10),
+      from: range.fromKey,
+      to: range.toKey,
       revenue,
       cogs,
       grossProfit,
