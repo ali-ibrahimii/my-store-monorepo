@@ -4,7 +4,7 @@ import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
 import { getStore } from "@/lib/repositories";
 import { storeDTO, type StoreRow } from "@/lib/serialize";
 import { assertData, getAdmin } from "@/lib/supabase";
-import { storeSettingsSchema } from "@my-store/shared-utils";
+import { DEFAULT_CURRENCY, storeSettingsSchema } from "@my-store/shared-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +40,7 @@ export async function PATCH(request: Request) {
           phone: data.phone || null,
           address: data.address || null,
           email: data.email || null,
-          currency: data.currency || "IRR",
+          currency: data.currency || DEFAULT_CURRENCY,
           tax_rate: data.taxRate ?? 0,
           invoice_prefix: (data.invoicePrefix || "INV").toUpperCase(),
           receipt_footer: data.receiptFooter || null,

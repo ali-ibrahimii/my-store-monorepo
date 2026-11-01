@@ -47,7 +47,7 @@ import { ScanFeed } from "@/components/scan-feed";
 import { StatCard } from "@/components/stat-card";
 import { requirePageUser } from "@/lib/auth";
 import { listInvoiceHeads, listProducts } from "@/lib/repositories";
-import { buildSalesSeries, daysAgo } from "@/lib/sales-series";
+import { buildSalesSeries, daysAgo, storeDaysAgo } from "@/lib/sales-series";
 import { getDailySales, getSummary } from "@/lib/stats";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +60,9 @@ export default async function DashboardPage() {
   const isAdmin = user.role === "ADMIN";
 
   const now = new Date();
-  const weekStart = daysAgo(7, now);
+  // بازه‌ی ۷ روز: برای کوئری از نیمه‌شب فروشگاه، برای نمودار از کلید روز
+  const weekStart = storeDaysAgo(7, now);
+  const weekStartKey = daysAgo(7, now);
 
   const [summary, recentInvoices, lowStockPage, allProductsPage, dailySales] =
     await Promise.all([
@@ -73,7 +75,7 @@ export default async function DashboardPage() {
 
   const lowStock = lowStockPage.items;
   const productCount = allProductsPage.total;
-  const series = buildSalesSeries(dailySales, weekStart, now);
+  const series = buildSalesSeries(dailySales, weekStartKey, now);
   const weekRevenue = series.reduce((sum, point) => sum + point.revenue, 0);
 
   return (
@@ -108,7 +110,9 @@ export default async function DashboardPage() {
           <StatCard
             title="سود خالص امروز"
             value={formatCurrency(summary.netProfitToday)}
-            hint={`هزینه امروز: ${formatCurrency(summary.todayExpenses)}`}
+            // سود خالص = فروش − بهای تمام‌شده − هزینه. قبلاً بهای تمام‌شده
+            // کسر نمی‌شد و عدد داشبورد از گزارش مالی خوش‌بینانه‌تر بود.
+            hint={`بهای تمام‌شده: ${formatCurrency(summary.todayCogs)} · هزینه: ${formatCurrency(summary.todayExpenses)}`}
             icon={TrendingUp}
             tone={summary.netProfitToday >= 0 ? "success" : "danger"}
           />
@@ -142,7 +146,7 @@ export default async function DashboardPage() {
         <StatCard
           title="سود خالص این ماه"
           value={formatCurrency(summary.netProfitMonth)}
-          hint={`هزینه ماه: ${formatCurrency(summary.monthExpenses)}`}
+          hint={`بهای تمام‌شده: ${formatCurrency(summary.monthCogs)} · هزینه: ${formatCurrency(summary.monthExpenses)}`}
           icon={TrendingUp}
           tone={summary.netProfitMonth >= 0 ? "success" : "danger"}
         />

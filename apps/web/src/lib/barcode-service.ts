@@ -1,5 +1,5 @@
 import {
-  GS1_IRAN_PREFIX,
+  GS1_INSTORE_PREFIX,
   generateEan13,
   isBlankBarcode,
   isValidEan13,
@@ -27,7 +27,7 @@ export async function generateUniqueBarcode(
   const attempts = Math.max(1, options.attempts ?? 25);
   const used = await usedBarcodes(storeId);
   const storeCode = storeCodeFromId(storeId);
-  const prefix = options.prefix || GS1_IRAN_PREFIX;
+  const prefix = options.prefix || GS1_INSTORE_PREFIX;
 
   for (let i = 0; i < attempts; i++) {
     const code = generateEan13({ prefix, storeCode });
@@ -51,7 +51,7 @@ export async function generateBarcodeBatch(
   if (total === 0) return [];
   const used = await usedBarcodes(storeId);
   const storeCode = storeCodeFromId(storeId);
-  const prefix = options.prefix || GS1_IRAN_PREFIX;
+  const prefix = options.prefix || GS1_INSTORE_PREFIX;
   const codes = new Set<string>();
 
   for (let guard = 0; codes.size < total && guard < total * 50 + 500; guard++) {

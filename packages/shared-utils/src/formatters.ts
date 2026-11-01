@@ -1,21 +1,59 @@
+import { STORE_DATE_LOCALE, STORE_TIME_ZONE, storeDayKey } from "./datetime";
+
 // ============================================================
-// Formatters: currency (IRR / تومان, latin digits), dates (Jalali)
+// Formatters: currency (AFN / افغانی), numbers, dates (Jalali)
+//
+// ارز پیش‌فرض: افغانی (AFN).
+//  • برچسب کوتاه: افغانی
+//  • رده‌های پولی افغانستان: سکه‌های ۱، ۲، ۵ افغانی و اسکناس‌های ۱۰ تا ۱۰۰۰؛
+//    چون تورم بالا بوده، مبالغ معمولاً به هزار (هزار افغانی) گفته می‌شوند —
+//    برای همین «خلاصه‌ی خوانا» (compact) هم داریم: ۱٫۲ میلیون، ۴۵۰ هزار.
 // ============================================================
+
+/** برچسب ارزهای رایج در سیستم. */
+export const CURRENCY_LABELS: Record<string, string> = {
+  AFN: "افغانی",
+  IRR: "تومان",
+  USD: "دالر",
+  PKR: "کلدار",
+};
 
 /**
  * Format a money amount. Digits are always latin (en) for easy entry,
- * the currency label is appended in Persian.
+ * the currency label is appended in Persian/Dari.
  *
- * formatCurrency(123456) -> "123,456 تومان"
+ * formatCurrency(123456)          -> "123,456 افغانی"
+ * formatCurrency(123456, "USD")   -> "123,456 دالر"
  */
-export function formatCurrency(amount: number | string | null | undefined, currency = "IRR"): string {
+export function formatCurrency(amount: number | string | null | undefined, currency = "AFN"): string {
   const value = Number(amount ?? 0);
   const formatted = new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 0,
   }).format(value);
-
-  const label = currency === "IRR" ? "تومان" : currency;
+  const label = CURRENCY_LABELS[currency?.toUpperCase?.() ?? "AFN"] ?? currency ?? "افغانی";
   return `${formatted} ${label}`;
+}
+
+/**
+ * مبلغ خوانا و کوتاه — مناسب کارت‌های داشبورد روی موبایل:
+ *   ۱٬۲۳۴٬۵۶۷ → "۱٫۲۳ میلیون افغانی"
+ *   ۴۵۰٬۰۰۰   → "۴۵۰ هزار افغانی"
+ *   ۹۵٬۰۰۰    → "95,000 افغانی"
+ */
+export function formatCurrencyShort(
+  amount: number | string | null | undefined,
+  currency = "AFN",
+): string {
+  const value = Number(amount ?? 0);
+  const label = CURRENCY_LABELS[currency?.toUpperCase?.() ?? "AFN"] ?? currency ?? "افغانی";
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) {
+    return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value / 1_000_000)} میلیون ${label}`;
+  }
+  if (abs >= 100_000) {
+    return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value / 1_000)} هزار ${label}`;
+  }
+  return formatCurrency(value, currency);
 }
 
 /** Compact currency, e.g. 12,345 — no currency label. */
@@ -29,23 +67,46 @@ export function toPersianDigits(input: string | number): string {
   return String(input).replace(/[0-9]/g, (d) => fa[Number(d)]);
 }
 
-/** Jalali (Shamsi) date, e.g. ۱۴۰۵/۰۷/۱۵ — via Intl (full-icu). */
+/**
+ * تاریخ شمسی — «۱۴۰۵/۰۸/۱۰».
+ *
+ * منطقه‌ی زمانی و لوکیل از `datetime.ts` می‌آید (Asia/Kabul + fa-AF)، پس
+ * تاریخ درست حتی وقتی سرور UTC است هم نمایش داده می‌شود. ماه‌ها با نام
+ * افغانستانی (حمل، ثور، جوزا …) در `formatDateJalaliLong` می‌آیند.
+ */
 export function formatDateJalali(date: Date | string | number): string {
+  const formatter = new Intl.DateTimeFormat(STORE_DATE_LOCALE, {
+    timeZone: STORE_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
   try {
-    return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date(date));
+    return formatter.format(new Date(date));
   } catch {
-    return new Intl.DateTimeFormat("fa-IR", { dateStyle: "short" }).format(new Date(date));
+    return new Intl.DateTimeFormat("en", { dateStyle: "short" }).format(new Date(date));
   }
 }
 
-/** Jalali date + time, e.g. ۱۴۰۵/۰۷/۱۵ ۱۴:۳۲ */
+/** تاریخ شمسی با نام ماه — «۱۰ عقرب ۱۴۰۵» */
+export function formatDateJalaliLong(date: Date | string | number): string {
+  try {
+    return new Intl.DateTimeFormat(STORE_DATE_LOCALE, {
+      timeZone: STORE_TIME_ZONE,
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    }).format(new Date(date));
+  } catch {
+    return formatDateJalali(date);
+  }
+}
+
+/** تاریخ + ساعت شمسی — «۱۴۰۵/۰۸/۱۰ ۱۴:۳۲» */
 export function formatDateTimeJalali(date: Date | string | number): string {
   try {
-    return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+    return new Intl.DateTimeFormat(STORE_DATE_LOCALE, {
+      timeZone: STORE_TIME_ZONE,
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -53,19 +114,15 @@ export function formatDateTimeJalali(date: Date | string | number): string {
       minute: "2-digit",
     }).format(new Date(date));
   } catch {
-    return new Intl.DateTimeFormat("fa-IR", { dateStyle: "short", timeStyle: "short" }).format(
+    return new Intl.DateTimeFormat("en", { dateStyle: "short", timeStyle: "short" }).format(
       new Date(date),
     );
   }
 }
 
-/** Gregorian ISO-ish date for <input type="date"> values: YYYY-MM-DD */
+/** تاریخ میلادی برای <input type="date"> — به وقت فروشگاه (نه UTC سرور). */
 export function toInputDate(date: Date | string | number = new Date()): string {
-  const d = new Date(date);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return storeDayKey(new Date(date));
 }
 
 /** Relative-ish "x minutes ago" in Persian (simple). */

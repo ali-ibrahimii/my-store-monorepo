@@ -5,7 +5,7 @@
 export const APP_NAME = "my-store";
 export const APP_NAME_FA = "فروشگاه من";
 
-export const DEFAULT_CURRENCY = "IRR";
+export const DEFAULT_CURRENCY = "AFN";
 
 export const API_ROUTES = {
   products: "/api/products",

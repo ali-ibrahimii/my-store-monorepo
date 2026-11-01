@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { PackageSearch, Plus, Search, X } from "lucide-react";
+import { PackagePlus, PackageSearch, Plus, Search, X } from "lucide-react";
 
 import { Button } from "@my-store/ui-kit/components/button";
 import { Input } from "@my-store/ui-kit/components/input";
@@ -11,6 +11,8 @@ interface ProductPickerProps {
   unknownBarcode?: string | null;
   search: (query: string, limit?: number) => Product[];
   onPick: (product: Product) => void;
+  /** اگر داده شود، دکمه‌ی «ثبت کالای جدید با همین بارکد» نمایش داده می‌شود */
+  onCreateNew?: () => void;
   onClose: () => void;
 }
 
@@ -20,7 +22,7 @@ interface ProductPickerProps {
  *  • جست‌وجوی نام/بارکد روی خودِ گوشی (بدون اینترنت)
  *  • اگر متن ورودی خودش یک بارکد کامل باشد، همان لحظه اضافه می‌شود
  */
-export function ProductPicker({ unknownBarcode, search, onPick, onClose }: ProductPickerProps) {
+export function ProductPicker({ unknownBarcode, search, onPick, onCreateNew, onClose }: ProductPickerProps) {
   const [query, setQuery] = useState("");
 
   const results = useMemo(() => search(query, 40), [query, search]);
@@ -40,10 +42,20 @@ export function ProductPicker({ unknownBarcode, search, onPick, onClose }: Produ
         </header>
 
         {unknownBarcode ? (
-          <p className="text-warning bg-warning/10 border-warning/30 border-b px-4 py-2 text-xs">
-            بارکد <span dir="ltr" className="font-medium">{unknownBarcode}</span> در سیستم ثبت نشده
-            است. کالا را از فهرست زیر انتخاب کنید یا اول در پنل وب ثبتش کنید.
-          </p>
+          <div className="text-warning bg-warning/10 border-warning/30 space-y-2 border-b px-4 py-2.5 text-xs">
+            <p>
+              بارکد <span dir="ltr" className="font-medium">{unknownBarcode}</span> در سیستم ثبت نشده
+              است.
+            </p>
+            {onCreateNew ? (
+              <Button size="sm" variant="outline" className="h-9 w-full" onClick={onCreateNew}>
+                <PackagePlus className="size-4" />
+                ثبت کالای جدید با همین بارکد
+              </Button>
+            ) : (
+              <p>کالا را از فهرست زیر انتخاب کنید یا اول در پنل وب ثبت‌ش کنید.</p>
+            )}
+          </div>
         ) : null}
 
         <div className="border-b p-3">

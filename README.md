@@ -1,6 +1,11 @@
 # فروشگاه من
 
 پنل وب + اپ اسکنر گوشی. داده، ورود، فاکتور و انبار روی **سوپابیس** است.
+پیش‌فرض‌ها برای **افغانستان**: ارز **افغانی (AFN)**، منطقه‌ی زمانی **Asia/Kabul**،
+تقویم **هجری شمسی** با نام ماه‌های افغانستانی، و کد بارکد **درون‌فروشگاهی (۲۰۰)**.
+
+> راهنمای نیازها و تصمیم‌های افغانستان: [`docs/AFGHANISTAN.md`](docs/AFGHANISTAN.md)
+> نقشه‌ی رسیدن به حسابداری کامل: [`docs/ACCOUNTING-GAP-PLAN.md`](docs/ACCOUNTING-GAP-PLAN.md)
 
 - **وب** (`apps/web`): Next.js — مدیریت، فاکتورها، **چاپ فاکتور**
 - **اسکنر** (`apps/scanner`): Vite PWA — گوشی: اسکن اقلام → «ثبت فاکتور»
@@ -34,6 +39,8 @@ pnpm dev                                         # وب :3000 — اسکنر :51
 2. **SQL Editor**: فایل `supabase/migrations/0001_init.sql` را کامل اجرا کنید.
 3. **SQL Editor**: فایل `supabase/migrations/0002_realtime.sql` را کامل اجرا کنید
    (ریل‌تایم گوشی ↔ وب؛ بدون آن هم کار می‌کند ولی با پولینگ ۳ ثانیه‌ای).
+   سپس `supabase/migrations/0003_production_hardening.sql` را هم اجرا کنید
+   (ارز پیش‌فرض افغانی، سهمیه‌ی ثبت کالای صندوق‌دار، ایندکس‌های گزارش).
 4. **Authentication → Providers → Email** را روشن و «Confirm email» را خاموش کنید.
 5. **Project Settings → API Keys** و کلیدها را در `apps/web/.env.local` بگذارید:
 

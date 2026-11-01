@@ -428,3 +428,21 @@ export function redactProduct(product: Product, role: string): Product {
   if (role === "ADMIN") return product;
   return { ...product, costPrice: 0 };
 }
+
+/**
+ * حذف بهای خرید از پاسخ فاکتور برای صندوق‌دار.
+ *
+ * صفحه‌ی فاکتور و مسیرهای API، محصول هر قلم فاکتور را با `cost_price`
+ * برمی‌گرداندند؛ یعنی صندوق‌دار می‌توانست از تب Network مرورگر، حاشیه‌ی
+ * سود هر کالا را ببیند. این همان سیاستی است که در `/api/products` با
+ * `redactProduct` رعایت شده بود، ولی در فاکتور جا افتاده بود.
+ */
+export function redactInvoice(invoice: Invoice, role: string): Invoice {
+  if (role === "ADMIN") return invoice;
+  return {
+    ...invoice,
+    items: invoice.items.map((item) =>
+      item.product ? { ...item, product: { ...item.product, costPrice: 0 } } : item,
+    ),
+  };
+}

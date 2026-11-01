@@ -1,4 +1,5 @@
 import type { DailySalesPoint, SummaryReport } from "@my-store/shared-types";
+import { startOfStoreDay, startOfStoreMonth, storeDayKey } from "@my-store/shared-utils";
 
 import { assertData, getAdmin } from "./supabase";
 
@@ -28,36 +29,52 @@ interface LedgerLite {
 
 export async function getSummary(storeId: string): Promise<SummaryReport> {
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  // مرزهای زمانی به وقت فروشگاه (Asia/Kabul) و ماه شمسی — نه UTC سرور.
+  // قبلاً فروش ۱۲ شب تا ۳:۳۰ بامداد به «دیروز» می‌رفت و «این ماه» با
+  // ماه میلادی شروع می‌شد.
+  const todayStart = startOfStoreDay(now).toISOString();
+  const monthStart = startOfStoreMonth(now).toISOString();
 
-  const [invoicesRes, expensesRes, productsRes, invoiceCountRes] = await Promise.all([
+  const [invoicesRes, expensesRes, productsRes, invoiceCountRes, cogsRes] = await Promise.all([
     getAdmin()
       .from("invoices")
-      .select("total, paid_amount, status, created_at")
+      .select("id, total, paid_amount, status, created_at")
       .eq("store_id", storeId)
       .neq("status", "CANCELLED")
-      .gte("created_at", startOfMonth),
+      .gte("created_at", monthStart),
     getAdmin()
       .from("expenses")
       .select("amount, date")
       .eq("store_id", storeId)
-      .gte("date", startOfMonth),
+      .gte("date", monthStart),
     getAdmin()
       .from("products")
       .select("stock, cost_price, low_stock_threshold")
       .eq("store_id", storeId),
     getAdmin().from("invoices").select("id", { count: "exact", head: true }).eq("store_id", storeId),
+    // بهای تمام‌شده از دفتر کل (سند COGS) — همان منبع گزارش سود و زیان
+    getAdmin()
+      .from("ledger_entries")
+      .select("amount, date, type, ref_id")
+      .eq("store_id", storeId)
+      .eq("account", "COGS")
+      .gte("date", monthStart),
   ]);
 
   const invoices = assertData(invoicesRes) as InvoiceLite[];
   const expenses = assertData(expensesRes) as ExpenseLite[];
   const products = assertData(productsRes) as ProductLite[];
+  const cogsRows = assertData(cogsRes) as { amount: number | string; date: string; type: string; ref_id: string | null }[];
 
   const sumSince = (rows: InvoiceLite[], since: string) =>
     rows.filter((row) => row.created_at >= since).reduce((sum, row) => sum + Number(row.total), 0);
   const expSince = (since: string) =>
     expenses.filter((row) => row.date >= since).reduce((sum, row) => sum + Number(row.amount), 0);
+  /** COGS خالص (بدهکار منهای بستانکار) — برگشت فاکتور هم لحاظ می‌شود. */
+  const cogsSince = (since: string) =>
+    cogsRows
+      .filter((row) => row.date >= since)
+      .reduce((sum, row) => sum + (row.type === "DEBIT" ? Number(row.amount) : -Number(row.amount)), 0);
 
   const unpaidRes = await getAdmin()
     .from("invoices")
@@ -74,18 +91,25 @@ export async function getSummary(storeId: string): Promise<SummaryReport> {
     (product) => Number(product.stock ?? 0) <= Number(product.low_stock_threshold ?? 0),
   ).length;
 
-  const todayRevenue = sumSince(invoices, startOfToday);
-  const monthRevenue = sumSince(invoices, startOfMonth);
-  const todayExpenses = expSince(startOfToday);
-  const monthExpenses = expSince(startOfMonth);
+  const todayRevenue = sumSince(invoices, todayStart);
+  const monthRevenue = sumSince(invoices, monthStart);
+  const todayExpenses = expSince(todayStart);
+  const monthExpenses = expSince(monthStart);
+  const todayCogs = cogsSince(todayStart);
+  const monthCogs = cogsSince(monthStart);
 
   return {
     todayRevenue,
     monthRevenue,
     todayExpenses,
     monthExpenses,
-    netProfitToday: todayRevenue - todayExpenses,
-    netProfitMonth: monthRevenue - monthExpenses,
+    // سود خالص = درآمد − بهای تمام‌شده − هزینه. قبلاً COGS کم نمی‌شد و
+    // عدد داشبورد از گزارش مالی خوش‌بینانه‌تر بود.
+    todayCogs,
+    monthCogs,
+    grossProfitToday: todayRevenue - todayCogs,
+    netProfitToday: todayRevenue - todayCogs - todayExpenses,
+    netProfitMonth: monthRevenue - monthCogs - monthExpenses,
     inventoryValue,
     lowStockCount,
     unpaidInvoicesAmount: unpaidRows.reduce(
@@ -115,7 +139,8 @@ export async function getDailySales(storeId: string, from: Date, to: Date): Prom
   const rows = assertData(result) as { created_at: string; total: number | string }[];
   const byDay = new Map<string, DailySalesPoint>();
   for (const invoice of rows) {
-    const day = invoice.created_at.slice(0, 10);
+    // روز بر اساس ساعت فروشگاه، نه UTC (وگرنه فروش شب به روز بعد می‌افتد)
+    const day = storeDayKey(invoice.created_at);
     const point = byDay.get(day) ?? { date: day, revenue: 0, invoiceCount: 0 };
     point.revenue += Number(invoice.total);
     point.invoiceCount += 1;

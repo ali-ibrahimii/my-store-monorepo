@@ -6,7 +6,12 @@ import { Button } from "@my-store/ui-kit/components/button";
 import { Input } from "@my-store/ui-kit/components/input";
 import { Spinner } from "@my-store/ui-kit/components/spinner";
 import { ApiError, apiGet, apiPost } from "@my-store/api-client";
-import { API_ROUTES, toPersianDigits } from "@my-store/shared-utils";
+import {
+  API_ROUTES,
+  classifySetupIssue,
+  SETUP_ISSUE_LABELS,
+  toPersianDigits,
+} from "@my-store/shared-utils";
 import type { MobileSession } from "@my-store/shared-types";
 import { apiBaseUrlLabel, saveSession } from "../lib/api";
 
@@ -16,13 +21,25 @@ interface HealthResponse {
   configured?: boolean;
   project?: string | null;
   latencyMs?: number;
-  database?: { hint?: string; error?: string };
+  missingEnv?: string[];
+  database?: { reachable?: boolean; kind?: string; label?: string; hint?: string; error?: string };
 }
 
 function apiErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const body = error.data as HealthResponse | null;
-    if (error.status === 503 && body?.database?.hint) return body.database.hint;
+    // ۵۰۳ = سرور بالاست ولی دیتابیس آماده نیست؛ علت دقیق را از health می‌گیریم
+    if (error.status === 503) {
+      const kind = classifySetupIssue(body);
+      const hint = body?.database?.hint;
+      return hint ? `${SETUP_ISSUE_LABELS[kind]}: ${hint}` : error.message;
+    }
+    if (error.status === 401) {
+      return "ایمیل یا رمز عبور اشتباه است. (اگر مطمئنید درست است، شاید حساب غیرفعال شده باشد.)";
+    }
+    if (error.status === 403) {
+      return body?.error || "این حساب غیرفعال است یا به فروشگاهی وصل نیست";
+    }
     if (error.status >= 500) {
       const detail = body?.error || error.message;
       return `${detail} (HTTP ${error.status}) — آدرس API فعلی: ${apiBaseUrlLabel()}`;
@@ -30,10 +47,10 @@ function apiErrorMessage(error: unknown): string {
     return error.message || `خطای سرور (${error.status})`;
   }
   if (error instanceof SyntaxError) {
-    return `پاسخ سرور معتبر نیست. آدرس API فعلی: ${apiBaseUrlLabel()}`;
+    return `پاسخ سرور معتبر نیست (احتمالاً آدرس API به یک صفحه‌ی HTML وصل است). آدرس فعلی: ${apiBaseUrlLabel()}`;
   }
   if (error instanceof Error) {
-    if (/failed to fetch|network|load failed/i.test(error.message)) {
+    if (/failed to fetch|network|load failed|abort/i.test(error.message)) {
       return `ارتباط با وب‌اپ برقرار نشد. آدرس API فعلی: ${apiBaseUrlLabel()} — مقدار VITE_API_URL را بررسی کنید و CORS_ORIGINS را در وب‌اپ روی دامنه‌ی همین اسکنر بگذارید.`;
     }
     return error.message || "خطای ناشناخته";
@@ -51,15 +68,23 @@ export function LoginScreen({ onLoggedIn }: LoginScreenProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [health, setHealth] = useState<{ ok: boolean; detail?: string } | null>(null);
+  const [health, setHealth] = useState<{
+    ok: boolean;
+    label?: string;
+    detail?: string;
+    needsSchema?: boolean;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     apiGet<HealthResponse>(API_ROUTES.health)
       .then((result) => {
         if (cancelled) return;
+        const kind = classifySetupIssue(result);
         setHealth({
           ok: result.ok !== false,
+          label: result.ok === false ? (result.database?.label ?? SETUP_ISSUE_LABELS[kind]) : undefined,
+          needsSchema: result.ok === false && kind === "schema",
           detail:
             result.ok === false
               ? (result.database?.hint ?? result.database?.error ?? "دیتابیس در دسترس نیست")
@@ -67,7 +92,13 @@ export function LoginScreen({ onLoggedIn }: LoginScreenProps) {
         });
       })
       .catch((cause: unknown) => {
-        if (!cancelled) setHealth({ ok: false, detail: apiErrorMessage(cause) });
+        if (!cancelled) {
+          setHealth({
+            ok: false,
+            label: "ارتباط با سرور برقرار نشد",
+            detail: apiErrorMessage(cause),
+          });
+        }
       });
     return () => {
       cancelled = true;
@@ -156,7 +187,15 @@ export function LoginScreen({ onLoggedIn }: LoginScreenProps) {
             <Alert variant="destructive">
               <ServerCrash className="size-4" />
               <AlertDescription className="text-xs">
-                سرور/دیتابیس آماده نیست: {health.detail}
+                <span className="block font-semibold">{health.label ?? "سرور آماده نیست"}</span>
+                <span className="mt-1 block leading-5">{health.detail}</span>
+                {health.needsSchema ? (
+                  <span className="mt-2 block leading-5">
+                    ترتیب اجرا: <span dir="ltr">0001_init.sql</span> → <span dir="ltr">0002_realtime.sql</span> → بعد{" "}
+                    <span dir="ltr">pnpm db:seed</span> (یا صفحه‌ی <span dir="ltr">/register</span> در وب برای ساخت حساب
+                    مدیر).
+                  </span>
+                ) : null}
               </AlertDescription>
             </Alert>
           ) : null}

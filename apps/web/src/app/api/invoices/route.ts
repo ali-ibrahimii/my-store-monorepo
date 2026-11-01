@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { rangeFromParams } from "@/lib/date-range";
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
 import { createInvoice } from "@/lib/invoice-service";
 import { listInvoices } from "@/lib/repositories";
@@ -13,13 +14,12 @@ export async function GET(request: Request) {
     if (!user) return response;
 
     const { searchParams } = new URL(request.url);
-    const from = searchParams.get("from");
-    const to = searchParams.get("to");
+    const range = rangeFromParams(searchParams.get("from"), searchParams.get("to"));
     const page = await listInvoices(user.storeId, {
       status: searchParams.get("status") || undefined,
       search: searchParams.get("search")?.trim() || undefined,
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to + "T23:59:59.999Z") : undefined,
+      from: range.from,
+      to: range.to,
       page: Number(searchParams.get("page")) || 1,
       pageSize: Number(searchParams.get("pageSize")) || 50,
     });

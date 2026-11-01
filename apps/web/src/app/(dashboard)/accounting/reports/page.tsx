@@ -27,6 +27,7 @@ import {
 } from "@my-store/shared-utils";
 
 import { PageHeader } from "@/components/page-header";
+import { rangeFromParams } from "@/lib/date-range";
 import { SalesChart } from "@/components/sales-chart";
 import { StatCard } from "@/components/stat-card";
 import { requireAdminPage } from "@/lib/auth";
@@ -53,10 +54,10 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   const storeId = user.storeId;
   const params = await searchParams;
 
-  const now = new Date();
-  const defaultFrom = new Date(now.getFullYear(), now.getMonth(), 1);
-  const fromDate = params.from ? new Date(params.from) : defaultFrom;
-  const toDate = params.to ? new Date(params.to + "T23:59:59.999Z") : now;
+  // بازه را با ساعت فروشگاه و اعتبارسنجی می‌سازیم (نه UTC سرور)
+  const range = rangeFromParams(params.from, params.to);
+  const fromDate = range.from;
+  const toDate = range.to;
 
   const [byAccount, dailyPoints, inventoryValue, topProducts, payments] = await Promise.all([
     getLedgerBreakdown(storeId, fromDate, toDate),
@@ -93,7 +94,7 @@ export default async function ReportsPage({ searchParams }: PageProps) {
               name="from"
               dir="ltr"
               className="w-[10.5rem]"
-              defaultValue={params.from ?? fromDate.toISOString().slice(0, 10)}
+              defaultValue={params.from ?? range.fromKey}
             />
           </div>
           <div className="space-y-1.5">
@@ -106,7 +107,7 @@ export default async function ReportsPage({ searchParams }: PageProps) {
               name="to"
               dir="ltr"
               className="w-[10.5rem]"
-              defaultValue={params.to ?? now.toISOString().slice(0, 10)}
+              defaultValue={params.to ?? range.toKey}
             />
           </div>
           <Button type="submit">

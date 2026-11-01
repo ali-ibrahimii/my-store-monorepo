@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
 import { getInvoice } from "@/lib/repositories";
+import { redactInvoice } from "@/lib/serialize";
 import { setInvoiceStatus } from "@/lib/invoice-service";
 import type { InvoiceStatus } from "@my-store/shared-types";
 
@@ -21,7 +22,8 @@ export async function GET(_request: Request, context: RouteContext) {
     if (!invoice) {
       return NextResponse.json({ error: "فاکتور یافت نشد" }, { status: 404 });
     }
-    return NextResponse.json(invoice);
+    // قیمت خرید فقط برای مدیر — صندوق‌دار نباید margin را ببیند
+    return NextResponse.json(redactInvoice(invoice, user.role));
   } catch (error) {
     return handleRouteError(error);
   }
@@ -41,7 +43,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     const invoice = await setInvoiceStatus(id, status as InvoiceStatus, user);
-    return NextResponse.json(invoice);
+    return NextResponse.json(redactInvoice(invoice, user.role));
   } catch (error) {
     return handleRouteError(error);
   }

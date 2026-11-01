@@ -19,7 +19,7 @@ create table if not exists public.stores (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   slug text not null unique,
-  currency text not null default 'IRR',
+  currency text not null default 'AFN',
   phone text,
   address text,
   email text,

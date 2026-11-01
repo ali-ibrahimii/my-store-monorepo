@@ -1,5 +1,5 @@
 import type { Role, SessionUser } from "@my-store/shared-types";
-import { slugify } from "@my-store/shared-utils";
+import { DEFAULT_CURRENCY, slugify } from "@my-store/shared-utils";
 
 import { loadSessionUser } from "./auth";
 import { assertData, dbErrorMessage, getAdmin } from "./supabase";
@@ -21,7 +21,7 @@ export async function createStore(input: {
       name: input.name,
       slug,
       email: input.email || null,
-      currency: "IRR",
+      currency: DEFAULT_CURRENCY,
       tax_rate: 0,
       invoice_prefix: "INV",
       low_stock_default: 5,

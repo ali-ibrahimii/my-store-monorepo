@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { rangeFromParams } from "@/lib/date-range";
 import { handleRouteError, requireStoreUser } from "@/lib/api-helpers";
 import { listLedger } from "@/lib/repositories";
 
@@ -10,11 +11,10 @@ export async function GET(request: Request) {
     const { user, response } = await requireStoreUser("ADMIN");
     if (!user) return response;
     const { searchParams } = new URL(request.url);
-    const from = searchParams.get("from");
-    const to = searchParams.get("to");
+    const range = rangeFromParams(searchParams.get("from"), searchParams.get("to"));
     const entries = await listLedger(user.storeId, {
-      from: from ? new Date(from) : undefined,
-      to: to ? new Date(to + "T23:59:59.999Z") : undefined,
+      from: range.from,
+      to: range.to,
       account: searchParams.get("account") || undefined,
     });
     return NextResponse.json(entries);
